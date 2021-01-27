@@ -1,0 +1,2216 @@
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Drivers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriverAirValve
+VAR_INPUT
+	FeedBack:INT;
+	FeedBackBeat:INT;
+	SetPoint:INT;
+	Discrepancy:INT;
+	FaultTime:BYTE;
+	Stop:BOOL;
+	Reset:BOOL;
+END_VAR
+
+VAR_IN_OUT
+	Set:INT;
+	SetPointMax:INT;
+	SetPointMin:INT;
+END_VAR
+
+VAR_OUTPUT
+	Done:BOOL;
+	Error:BYTE;
+END_VAR
+VAR
+	FeedBackBeatOld:INT;
+	ton1:INT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+IF SetPointMin>=SetPointMax THEN SetPointMax:=SetPointMin +1; END_IF;
+IF SetPoint>SetPointMax THEN SetPoint:=SetPointMax; END_IF;
+IF SetPoint<SetPointMin THEN SetPoint:=SetPointMin; END_IF;
+
+IF (SetPoint-Discrepancy>FeedBack OR SetPoint+Discrepancy<FeedBack) AND FeedBackBeat=FeedBackBeatOld THEN
+	Done:=FALSE;
+	IF ton1<(FaultTime*10) THEN
+		ton1:=ton1+1;
+	ELSE
+		Error.0:=TRUE;
+	END_IF;
+ELSE ton1:=0; Done:=TRUE;
+END_IF;
+(*
+IF FeedBackBeat=FeedBackBeatOld AND FeedBackBeat=-1 THEN
+	Error.1:=TRUE;
+ 	ton1:=0;
+END_IF;*)
+
+IF Reset AND Error<>0 THEN Error:=0; ton1:=0; END_IF;
+
+IF FeedBackBeatOld<>FeedBackBeat THEN
+	FeedBackBeatOld:=FeedBackBeat;
+END_IF;
+
+IF NOT Stop AND Error=0 THEN
+	Set:=SetPoint;
+ELSE Done:=FALSE;
+END_IF;
+
+
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Drivers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriverBoiler
+VAR_INPUT
+	StartIn:BOOL;
+	RegStart:BOOL;
+	PV:REAL;
+	Beat:WORD;
+	SP:REAL;
+	DB:REAL;
+	Xp:REAL;
+	Xi:REAL;
+	Xd:REAL;
+	Off:INT;
+END_VAR
+VAR_OUTPUT
+	StartOut:BOOL;
+	Y:INT;
+END_VAR
+VAR
+
+
+	Kp:REAL;
+	Ki:REAL;
+	Kd:REAL;
+	EiOld:REAL;
+	BeatOld:WORD;
+	ton1:INT;
+
+END_VAR
+(* @END_DECLARATION := '0' *)
+(*Формула ПИД регулирования:
+	Y	=	Xp*Ei	+	Xi*summ(Ei)	+	Xd*dEi,
+где
+	Ei			-	рассогласование между текущим значением и уставкой
+	Summ		-	накопленная ошибка рассогласований
+	dEi			-	разница между двумя соседними рассогласованиями
+	Xp			-	пропорциональный коэффициент
+	Xi			-	интегральный коэффициент
+	Xd			-	дифференциальный коэффициент
+	Y			-	выход.
+*)
+
+IF StartIn THEN
+	IF Beat<>BeatOld THEN
+		IF SP-PV>DB AND NOT StartOut THEN StartOut:=TRUE; END_IF;
+		IF RegStart THEN
+			IF ABS(SP-PV)>DB THEN
+
+				Kp:=Xp*(SP-PV);
+
+				Ki:=Ki+Xi*(SP-PV);
+				IF Ki<0.0 THEN Ki:=0.0; ELSIF Ki>100.0 THEN Ki:=100.0; END_IF;
+
+				Kd:=Xd*(SP-PV-EiOld); EiOld:=SP-PV;
+
+				Y:=REAL_TO_INT(Kp+Ki+kd);
+				IF Y<0 THEN Y:=0; ELSIF Y>100 THEN Y:=100; END_IF;
+			END_IF;
+
+		ELSE
+			Ki:=0.0; EiOld:=0.0; Y:=0;
+		END_IF;
+	END_IF;
+
+	IF PV>Off AND RegStart THEN
+		IF ton1<50 THEN
+			ton1:=ton1+1;
+		ELSE
+			StartOut:=FALSE;
+			ton1:=0;
+		END_IF;
+	ELSE ton1:=0;
+	END_IF;
+	BeatOld:=Beat;
+ELSE StartOut:=FALSE;
+END_IF;
+
+
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Drivers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriverBurner
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	ton1: INT;
+	ton2:BYTE;
+	ton3:BYTE;
+	ControlStateOld:INT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+IF NOT Health THEN startcmnd:=FALSE; END_IF;
+
+IF NOT startcmnd AND ControlState>0 AND ControlState<>10  THEN ControlState:=10; END_IF;
+IF ControlState<>ControlStateOld THEN ton1:=0; ton2:=0; END_IF;
+ControlStateOld:=ControlState;
+
+IF ControlMode<>3 THEN
+	CASE ControlState OF
+		0:																				(*Полный останов*)
+			AirValveSetPoint:=0;
+			FunStart:=FALSE;
+			GasValveStart:=FALSE;
+			Trans:=FALSE;
+			ton1:=0;
+			Valve1:=FALSE;
+			Valve2:=FALSE;
+			Valve3:=FALSE;
+			Pump:=FALSE;
+			IF startcmnd AND Health THEN IF NOT OilMode THEN ControlState:=1; ELSE ControlState:=20; END_IF; END_IF;
+		1:
+			IF NOT GasRegValveCalibrateComplete THEN
+				GasRegValveCalibrateEnable:=TRUE;
+			END_IF;
+			IF NOT AirValveCalibrateComplete THEN
+				AirValveCalibrateEnable:=TRUE;
+			END_IF;
+			IF NOT GasRegValveCalibrateComplete OR NOT AirValveCalibrateComplete THEN
+				ControlState:=2;
+			ELSE
+				GasRegInit:=TRUE;
+				ControlState:=3;
+				AirValveSetPoint:=AirValveStartSP;
+			END_IF;
+		2:																				(*Калибровка газового клапана*)
+			IF GasRegValveCalibrateComplete THEN
+				GasRegInit:=TRUE;
+				IF AirValveCalibrateComplete THEN ControlState:=3; AirValveSetPoint:=AirValveStartSP; END_IF;
+			END_IF;
+		3:
+			FunStart:=TRUE;
+			IF AirValveDone THEN
+				GasRegValveSetPoint:=GasRegValveSPs[0];
+				ControlState:=4;
+			END_IF;
+		4:																				(*Продувка*)
+			ton1:=ton1+1;
+			IF ton1>=(StartDelayTime*10)-50 THEN
+				AirValveSetPoint:=	AirRegValveSPs[0];
+			END_IF;
+			IF ton1>=(StartDelayTime*10) AND AirValveDone THEN
+				ControlState:=5;
+			END_IF;
+		5:																				(*Проверка клапанов*)
+			GasValveStart:=TRUE;
+			IF GasValveReady THEN
+				ControlState:=6;
+			END_IF;
+		6:																				(*Розжиг*)
+			 trans:=TRUE;
+			IF GasValveDone THEN
+				ton1:=ton1+1;
+				IF ton1>IgnitionDelayTime*10 THEN
+					trans:=FALSE;
+					ControlState:=7;
+				END_IF;
+			END_IF;
+		7:																				(*Стабилизация пламени*)
+			ton1:=ton1+1;
+			IF ton1>StabilizationDelayTime*10 THEN
+				ControlState:=8;
+			END_IF;
+		8:																				(*Регулирование*)
+			GasRegulatorStart:=TRUE;
+		10:
+			GasRegulatorStart:=FALSE;
+			trans:=FALSE;
+			GasValveStart:=FALSE;
+			Pump:=FALSE;
+			Valve1:=FALSE;
+			Valve2:=FALSE;
+			Valve3:=FALSE;
+			AirValveSetPoint:=AirValveStopSP;
+			ton1:=ton1+1;
+			IF ton1>=(StopDelayTime*10) THEN
+				ControlState:=0;
+				GasRegValveSetPoint:=GasRegValveSPs[0];
+			END_IF;
+		20:
+			IF NOT AirValveCalibrateComplete THEN
+				AirValveCalibrateEnable:=TRUE;
+			END_IF;
+			IF NOT AirValveCalibrateComplete THEN
+				ControlState:=21;
+			ELSE
+				GasRegInit:=TRUE;
+				ControlState:=22;
+				AirValveSetPoint:=AirValveStartSP;
+			END_IF;
+		21:																				(*Калибровка воздушного клапана*)
+			IF AirValveCalibrateComplete THEN ControlState:=22; AirValveSetPoint:=AirValveStartSP; END_IF;
+		22:
+			FunStart:=TRUE;
+			IF AirValveDone THEN
+				GasRegInit:=TRUE;
+				ControlState:=23;
+			END_IF;
+		23:																				(*Продувка*)
+			ton1:=ton1+1;
+			IF ton1>=(StartDelayTime*10)-50 THEN
+				AirValveSetPoint:=	AirValveOil0;
+				Pump:=TRUE;
+			END_IF;
+			IF ton1>=(StartDelayTime*10) AND AirValveDone THEN
+				ControlState:=24;
+			END_IF;
+		24:																				(*Розжиг*)
+			trans:=TRUE;
+			ton1:=ton1+1;
+			IF ton1=10 THEN  Valve1:=TRUE; END_IF;
+			IF ton1>IgnitionDelayTime*10 THEN
+				trans:=FALSE;
+				ControlState:=25;
+			END_IF;
+		25:																				(*Стабилизация пламени*)
+			ton1:=ton1+1;
+			IF ton1>StabilizationDelayTime*10 THEN
+				ControlState:=26;
+			END_IF;
+		26:																				(*Регулирование*)
+			CASE GasRegulatorSetPoint OF
+				0..30:
+					AirValveSetPoint:=AirValveOil1;
+					IF AirValve.CurrentPosition<(INT_TO_REAL(AirValveOil1+AirValveOil2)/2) THEN Valve2:=FALSE; END_IF;
+					IF AirValve.CurrentPosition<(INT_TO_REAL(AirValveOil2+AirValveOil3)/2) THEN Valve3:=FALSE; END_IF;
+				31..60:
+					AirValveSetPoint:=AirValveOil2;
+					IF AirValve.CurrentPosition>(INT_TO_REAL(AirValveOil1+AirValveOil2)/2) THEN Valve2:=TRUE; END_IF;
+					IF AirValve.CurrentPosition<(INT_TO_REAL(AirValveOil2+AirValveOil3)/2) THEN Valve3:=FALSE; END_IF;
+				61..100:
+					AirValveSetPoint:=AirValveOil3;
+					IF AirValve.CurrentPosition>(INT_TO_REAL(AirValveOil1+AirValveOil2)/2) THEN Valve2:=TRUE; END_IF;
+					IF AirValve.CurrentPosition>(INT_TO_REAL(AirValveOil2+AirValveOil3)/2) THEN Valve3:=TRUE; END_IF;
+			END_CASE;
+	END_CASE;
+
+	CASE ControlState OF
+		0:
+			Run:=FALSE;
+			RunLed:=FALSE;
+		1..6:
+			ton2:=ton2+1;
+			IF ton2>40 THEN ton2:=0; END_IF;
+			Run:=ton2<20;
+			RunLed:=ton2<20;
+		7:
+			Run:=TRUE;
+			RunLed:=TRUE;
+		10:
+			ton2:=ton2+1;
+			IF ton2>40 THEN ton2:=0; END_IF;
+			Run:=ton2<20;
+			RunLed:=ton2<20;
+	END_CASE;
+
+	IF NOT LimitSwitch THEN BurnerErrors.0:=TRUE; END_IF;
+	IF FlameSensorState AND ((ControlState>0 AND ControlState<5) OR (ControlState>20 AND ControlState<24)) THEN
+		IF ton3<20 THEN
+			ton3:=ton3+1;
+		ELSE BurnerErrors.1:=TRUE;
+		END_IF;
+	ELSIF NOT FlameSensorState AND ((ControlState>5 AND ControlState<10) OR ControlState>24) THEN
+		IF ton3<20 THEN
+			ton3:=ton3+1;
+		ELSE BurnerErrors.2:=TRUE;
+		END_IF;
+	ELSE ton3:=0; END_IF;
+	IF PowerSP_prphBeat=65535 AND ControlMode<>1 THEN BurnerErrors.3:=TRUE; END_IF;
+
+	IF ControlState>0 AND ControlState<>10 THEN
+		 FlameSensorMode:=1;
+	ELSE  FlameSensorMode:=0;
+	END_IF;
+
+	IF FaultReset THEN BurnerErrors:=0; END_IF;
+
+	Alarm:=NOT health;
+	AlarmLed:=NOT health;
+END_IF;
+
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Drivers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriverFlameSensor
+VAR_INPUT
+	Mode: BYTE;
+	CheckingTime: BYTE := 1;
+	Simulate:BOOL;
+	FeedBack: BOOL;
+END_VAR
+
+VAR_OUTPUT
+	Beat: REAL;
+	CurrentState:BOOL;
+END_VAR
+
+VAR
+	ton1: BYTE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+CASE Mode OF
+	0:
+		IF ton1<>0 THEN ton1:=0; END_IF;
+		IF Beat<>0.0 THEN Beat:=0.0; END_IF;
+		CurrentState:=FALSE;
+	1:
+		IF FeedBack THEN Beat:=0.0; ELSE Beat:=1000.0; END_IF;
+		IF NOT FeedBack AND ton1<CheckingTime THEN
+			ton1:=ton1+1;
+		ELSIF FeedBack THEN CurrentState:=TRUE; IF ton1<>0 THEN ton1:=0; END_IF;
+		ELSE CurrentState:=FALSE; IF ton1<>0 THEN ton1:=0; END_IF;
+		END_IF;
+	2:
+		IF ton1<>0 THEN ton1:=0; END_IF;
+		IF Beat<>0.0 THEN Beat:=0.0; END_IF;
+		CurrentState:=Simulate;
+END_CASE;
+
+
+
+
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Drivers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriverFun
+VAR_INPUT
+	Pressure:INT;
+	PressureBeat:INT;
+	DelayTimeForCheking:INT:=30;
+	PressureHH:INT;
+	PressureH:INT;
+	PressureL:INT;
+	PressureLL:INT;
+	Start:BOOL;
+	Stop:BOOL;
+	Reset:BOOL;
+END_VAR
+
+VAR_IN_OUT
+	PressureMax:INT;
+	PressureMin:INT;
+	Set:BOOL;
+END_VAR
+
+VAR_OUTPUT
+	Warning:BYTE;
+	Error:BYTE;
+END_VAR
+VAR
+	PressureBeatOld:INT;
+	ton1:INT;
+	ton2: BYTE;
+END_VAR
+
+(* @END_DECLARATION := '0' *)
+
+IF Reset AND Error<>0 THEN Error:=0; Warning:=0;  ton1:=0; END_IF;
+
+Warning.0:=(PressureBeatOld=PressureBeat) AND (PressureBeatOld=-1);
+
+IF PressureBeatOld<>PressureBeat THEN
+	PressureBeatOld:=PressureBeat;
+END_IF;
+
+IF set AND ton1<(DelayTimeForCheking*10) THEN	ton1:=ton1+1;
+ELSIF NOT set THEN ton1:=0;
+END_IF;
+
+IF Pressure>PressureHH THEN
+	IF ton2<50 THEN
+		ton2:=ton2+1;
+	ELSE
+		Error.1:=TRUE;
+	END_IF;
+ELSIF Pressure>PressureMax THEN
+	PressureMax:=Pressure;
+ELSIF ton1>=(DelayTimeForCheking*10) AND Pressure<PressureLL THEN
+	IF ton2<50 THEN
+		ton2:=ton2+1;
+	ELSE
+		Error.2:=TRUE;
+	END_IF;
+ELSIF ton1>=(DelayTimeForCheking*10) AND Pressure<PressureMin THEN
+	PressureMin:=Pressure;
+ELSE ton2:=0;
+END_IF;
+
+Warning.1:=Pressure>PressureH AND NOT Error.1;
+Warning.2:=Pressure<PressureL AND NOT Error.2 AND ton1>=(DelayTimeForCheking*10);
+
+IF NOT Stop THEN Set:=Start; END_IF;
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Drivers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriverGasRegulator
+VAR_INPUT
+	Start:BOOL;
+	Stop:BOOL;
+	ServiceMode:BOOL;
+	GasValveDone:BOOL;
+	GasCurrentPosition:REAL;
+	ChangingTime:INT;
+	GasSPs:ARRAY [0..10] OF INT;
+	AirSPs:ARRAY [0..10] OF INT;
+END_VAR
+VAR_IN_OUT
+	Init:BOOL;
+	SetPoint:INT;
+	GasCurrentSP:REAL;
+	AirCurrentSP:REAL;
+END_VAR
+
+VAR_OUTPUT
+	CurrentPoint:INT;
+	Changing:BOOL;
+	Done:BOOL;
+END_VAR
+VAR
+	ControlValue:INT;
+	SetPointMax:INT;
+	SetPointMin:INT;
+	ServiceVar: ARRAY [0..9,0..2] OF REAL;
+	i: INT;
+	j:INT;
+	k:INT;
+	l:INT;
+	tmp:REAL;
+	GasOldSP:REAL;
+	Beat:REAL;
+	Change:BOOL;
+END_VAR
+(* @END_DECLARATION := '0' *)
+IF Init THEN
+	Done:=FALSE;
+	FOR i:=0 TO 9 DO
+		j:=i+1;
+		IF GasSPs[j]<>GasSPs[i] THEN
+			ServiceVar[i,1]:=INT_TO_REAL(AirSPs[j]-AirSPs[i])/INT_TO_REAL(GasSPs[j]-GasSPs[i]);										(*k*)
+			ServiceVar[i,2]:=INT_TO_REAL((GasSPs[j]*AirSPs[i])-(GasSPs[i]*AirSPs[j]))/INT_TO_REAL(GasSPs[j]-GasSPs[i]);			(*b*)
+		ELSE
+			ServiceVar[i,1]:=0;
+			ServiceVar[i,2]:=AirSPs[j];
+		END_IF;
+		IF GasSPs[j]<>0 THEN
+			IF GasSPs[j]>SetPointMax THEN SetPointMax:=GasSPs[j]; END_IF;
+		END_IF;
+	END_FOR;
+
+	IF j=10 THEN
+		SetPointMin:=GasSPs[1];
+		Init:=FALSE;
+		i:=0; j:=0;
+		Beat:=INT_TO_REAL(SetPointMax-SetPointMin)/INT_TO_REAL(ChangingTime*10);
+	END_IF;
+END_IF;
+
+CurrentPoint:=REAL_TO_INT(GasCurrentPosition);
+
+IF SetPoint<SetPointMin THEN SetPoint:=SetPointMin; END_IF;
+IF SetPoint>SetPointMax THEN SetPoint:=SetPointMax; END_IF;
+
+IF NOT stop THEN
+
+	IF NOT Start THEN  ControlValue:=0; END_IF;
+
+	CASE ControlValue OF
+		0:
+			IF Start THEN ControlValue:=1; END_IF;
+			Done:=TRUE;
+		1:
+			IF INT_TO_REAL(GasSPs[1])-GasCurrentSP>Beat THEN
+				GasCurrentSP:=GasCurrentSP+Beat;
+			ELSIF Beat<GasCurrentSP-INT_TO_REAL(GasSPs[1]) THEN
+				GasCurrentSP:=GasCurrentSP-Beat;
+			ELSE
+				Done:=TRUE;
+				GasCurrentSP:=INT_TO_REAL(GasSPs[1]);
+				IF NOT ServiceMode THEN ControlValue:=2; ELSE ControlValue:=3; END_IF;
+			END_IF;
+				AirCurrentSP:=(GasCurrentSP*ServiceVar[0,1])+ServiceVar[0,2];
+		2:
+			IF Init THEN Change:=TRUE; END_IF;
+			IF INT_TO_REAL(SetPoint)<>GasCurrentSP OR Change THEN
+				Done:=FALSE;
+				FOR j:=1 TO 9 DO
+					IF CurrentPoint>=GasSPs[j] THEN i:=j; END_IF;
+				END_FOR;
+			END_IF;
+			IF (INT_TO_REAL(SetPoint)-Beat)>GasCurrentSP THEN
+				GasCurrentSP:=GasCurrentSP+Beat;
+			ELSIF (INT_TO_REAL(SetPoint)+Beat)<GasCurrentSP THEN
+				GasCurrentSP:=GasCurrentSP-Beat;
+			ELSE
+				Change:=FALSE;
+				Done:=TRUE; j:=0;
+				GasCurrentSP:=INT_TO_REAL(SetPoint);
+				IF NOT ServiceMode THEN ControlValue:=2; ELSE ControlValue:=3; END_IF;
+			END_IF;
+			AirCurrentSP:=(GasCurrentSP*ServiceVar[i,1])+ServiceVar[i,2];
+			IF ServiceMode THEN ControlValue:=3; END_IF;
+		3:
+				GasCurrentSP:=INT_TO_REAL(GasSPs[1]);
+				AirCurrentSP:=INT_TO_REAL(AirSPs[1]);
+				IF NOT ServiceMode THEN ControlValue:=2; END_IF;
+	END_CASE;
+END_IF;
+
+
+
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Drivers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriverGasRegValve
+VAR_INPUT
+	FeedBack:INT;
+	FeedBackBeat:WORD;
+	Offset:INT;
+	SetPoint:REAL;
+	DeadBand:INT;
+	Gain:REAL:=1.0;
+	RunningTime:INT;
+	FaultTime:BYTE;
+	Stop:BOOL;
+	Reset:BOOL;
+END_VAR
+
+VAR_IN_OUT
+	CalibrateEnable:BOOL;
+	FeedBackMax:INT;
+	FeedBackMin:INT;
+	ChangingSpeed:REAL;
+	CalibrateComplete:BOOL;
+	SetUp:BOOL;
+	SetDown:BOOL;
+END_VAR
+
+VAR_OUTPUT
+	Done:BOOL;
+	CurrentPosition:REAL;
+	Error:BYTE;
+END_VAR
+VAR
+	OffsetActive:BOOL;
+	FeedBackBeatOld:WORD;
+	FeedBackOld:INT;
+	FeedBackPreOld:INT;
+	CalibrateState:BYTE;
+	ControlState:BYTE;
+	ChangingTime:INT;
+	ton1:INT;
+	ton2:BYTE;
+	ton3:BYTE;
+	ton4:BYTE;
+	ton5:BYTE;
+	tmp1:REAL;
+	tmp2:INT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+CASE CalibrateState OF
+	0:
+		IF CalibrateEnable THEN	SetUp:=TRUE; CalibrateState:=1; END_IF;
+	1:
+		ton1:=ton1+1;
+		IF ton1>100 THEN CalibrateState:=2; END_IF;
+		CalibrateComplete:=FALSE;
+	2:
+		ton1:=ton1+1;
+		IF ton1>=(RunningTime*10) OR (FeedBackPreOld=FeedBackOld AND FeedBackOld=FeedBack) THEN
+			ton1:=0;
+			CalibrateState:=3;
+			SetUp:=FALSE;
+		END_IF;
+	3:
+		ton1:=ton1+1;
+		IF ton1>=50 THEN
+			ton1:=0;
+			FeedBackMax:=FeedBack;
+			CalibrateState:=4;
+		END_IF;
+	4:
+		SetDown:=TRUE;
+		CalibrateState:=5;
+	5:
+		ton1:=ton1+1;
+		IF ton1>100 THEN SetDown:=FALSE; CalibrateState:=6; ton1:=0; END_IF;
+	6:
+		ton1:=ton1+1;
+ 		IF FeedBackPreOld=FeedBackOld AND FeedBackOld=FeedBack AND ton1>50 THEN
+			tmp2:=FeedBack;
+			CalibrateState:=7;
+		END_IF;
+	7:
+		SetDown:=TRUE;
+		CalibrateState:=8;
+		ton1:=100;
+		ton2:=0;
+	8:
+		ton1:=ton1+1;
+		IF ton1>=(RunningTime*10) OR (FeedBackPreOld=FeedBackOld AND FeedBackOld=FeedBack) THEN
+			IF ton2<50 THEN ton2:=ton2+1; ELSE
+				IF FeedBack<FeedBackMax THEN
+					FeedBackMax:=FeedBackMax;
+					FeedBackMin:=FeedBack;
+				ELSE
+					FeedBackMax:=FeedBackMax;
+					FeedBackMin:=FeedBack;
+				END_IF;
+				SetDown:=FALSE;
+				CalibrateState:=0;
+				ton1:=0;
+				CalibrateEnable:=FALSE;
+				CalibrateComplete:=TRUE;
+				ChangingSpeed:=10.0-(INT_TO_REAL(tmp2-FeedBackMin)*10.0/(FeedBackMax-FeedBackMin));
+				Done:=TRUE;
+			END_IF;
+		END_IF;
+
+END_CASE;
+
+IF NOT CalibrateComplete THEN
+	ControlState:=0;
+ELSE
+	CurrentPosition:=INT_TO_REAL(FeedBack-FeedBackMin)*100.0/(FeedBackMax-FeedBackMin);
+END_IF;
+
+
+CASE ControlState OF
+	0:
+		IF CalibrateComplete THEN ControlState:=1; END_IF;
+		ton4:=0;
+	1:
+		IF NOT stop THEN
+			IF (SetPoint-DeadBand)>(CurrentPosition) THEN ControlState:=10; Done:=FALSE; END_IF;
+			IF SetPoint<(CurrentPosition-DeadBand) THEN ControlState:=20; Done:=FALSE; END_IF;
+		END_IF;
+	10:
+		ChangingTime:=REAL_TO_INT(10*(SetPoint-CurrentPosition-DeadBand)/(ChangingSpeed*Gain));
+		SetUp:=TRUE;
+		ControlState:=11;
+	11:
+		IF FeedBackBeatOld<>FeedBackBeat THEN
+			IF (SetPoint-DeadBand)>CurrentPosition THEN
+				ChangingTime:=REAL_TO_INT(10*(SetPoint-CurrentPosition-DeadBand)/(ChangingSpeed*Gain));
+				ton1:=0;
+			END_IF;
+		END_IF;
+		IF ton1>=ChangingTime OR (SetPoint-DeadBand)<CurrentPosition THEN SetUp:=FALSE; ton1:=0; ControlState:=30; END_IF;
+		ton1:=ton1+1;
+	20:
+		ChangingTime:=REAL_TO_INT(10*((CurrentPosition-SetPoint+DeadBand))/(ChangingSpeed*Gain));
+		SetDown:=TRUE;
+		ControlState:=21;
+	21:
+		IF FeedBackBeatOld<>FeedBackBeat THEN
+			IF SetPoint+DeadBand<CurrentPosition THEN
+				ChangingTime:=REAL_TO_INT(10*((CurrentPosition-SetPoint+DeadBand))/(ChangingSpeed*Gain));
+				ton1:=0;
+			END_IF;
+		END_IF;
+		IF ton1>=ChangingTime OR (SetPoint+DeadBand>CurrentPosition) THEN SetDown:=FALSE; ton1:=0; ControlState:=30; END_IF;
+		ton1:=ton1+1;
+	30:
+		IF (FeedBackBeatOld<>FeedBackBeat) THEN ton4:=ton4+1; END_IF;
+		IF ton1<50 THEN
+			ton1:=ton1+1;
+		ELSIF ton4>=6 THEN
+			ton1:=0; ton4:=0; ControlState:=1;
+			IF ABS(SetPoint-CurrentPosition)<=DeadBand THEN Done:=TRUE; END_IF;
+		END_IF;
+END_CASE;
+
+IF FeedBackBeatOld<>FeedBackBeat THEN
+	IF (SetUp OR SetDown) AND FeedBackOld=FeedBack THEN
+		IF ton3< (FaultTime*10) THEN
+			ton3:=ton3+1;
+		ELSE
+			Error.0:=TRUE;
+		END_IF;
+	ELSE ton3:=0;
+	END_IF;
+	FeedBackBeatOld:=FeedBackBeat;
+	FeedBackPreOld:=FeedBackOld;
+	FeedBackOld:=FeedBack;
+ELSIF FeedBackBeat=65535 THEN
+	IF ton5<100 THEN ton5:=ton5+1;
+	ELSE
+		Error.1:=TRUE;
+	END_IF;
+ELSE
+	ton5:=0;
+END_IF;
+
+IF Error<>0 THEN
+	CalibrateEnable:=FALSE;
+	CalibrateState:=0;
+	ControlState:=0;
+	ton1:=0;
+	ton2:=0;
+END_IF;
+
+IF Reset AND Error<>0 THEN Error:=0; ton3:=0; END_IF;
+
+IF NOT Stop THEN
+	IF Error<>0 THEN
+	SetUp:=FALSE;
+	SetDown:=FALSE;
+END_IF;
+	IF SetDown THEN SetUp:=FALSE; END_IF;
+	IF SetUp THEN SetDown:=FALSE; END_IF;
+END_IF;
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Drivers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriverGasValve
+VAR_INPUT
+	Mode:BYTE;
+	Pressure:INT;
+	PressureBeat:INT;
+	PressureHH:INT;
+	PressureH:INT;
+	PressureL:INT;
+	PressureLL:INT;
+	DelayTime:BYTE;
+	IgnitionDelay:BYTE;
+	IgnitionTime:BYTE;
+	IncomingPressureMax:BOOL;
+	IncomingPressureMin:BOOL;
+	SafetyPressureMax:BOOL;
+	Start:BOOL;
+	Stop:BOOL;
+	Reset:BOOL;
+END_VAR
+
+VAR_IN_OUT
+	PressureMax:INT;
+	PressureMin:INT;
+	Valve1:BOOL;
+	Valve2:BOOL;
+	ValveSafety:BOOL;
+	ValveIgnition:BOOL;
+END_VAR
+
+VAR_OUTPUT
+	Done:BOOL;
+	Ready:BOOL;
+	Warning:BYTE;
+	Error:BYTE;
+END_VAR
+VAR
+	PressureBeatOld:INT;
+	ton1:INT;
+	ton2:BYTE;
+	ControlState: BYTE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+IF Reset AND Error<>0 THEN Error:=0; ton1:=0; END_IF;
+
+IF Pressure=0 AND PressureHH=0 AND PressureLL=0 THEN
+	IF Error.0<>0 THEN Error.0:=0; END_IF;
+	IF Warning.1<>0 THEN Warning.1:=0; END_IF;
+	IF Warning.2<>0 THEN Warning.2:=0; END_IF;
+	IF IncomingPressureMax THEN
+		IF ton2<10 THEN ton2:=ton2+1;
+		ELSE Error.1:=TRUE;
+		END_IF;
+	ELSIF IncomingPressureMin THEN
+		IF ton2<10 THEN ton2:=ton2+1;
+		ELSE Error.2:=TRUE;
+		END_IF;
+	ELSE ton2:=0;
+	END_IF;
+	IF mode=1 AND ((ControlState=4 AND NOT SafetyPressureMax) OR (ControlState>1 AND ControlState<3 AND SafetyPressureMax)) THEN
+		Error.3:=TRUE;
+	END_IF;
+ELSE
+	IF PressureBeatOld<>PressureBeat THEN
+		PressureBeatOld:=PressureBeat;
+	ELSIF PressureBeatOld=PressureBeat AND PressureBeat=-1 THEN
+		Error.0:=TRUE;
+	END_IF;
+	IF Pressure>PressureHH THEN
+		IF ton2<50 THEN ton2:=ton2+1;
+		ELSE Error.1:=TRUE;
+		END_IF;
+	ELSIF Pressure<PressureLL THEN
+		IF ton2<50 THEN ton2:=ton2+1;
+		ELSE Error.2:=TRUE;
+		END_IF;
+	ELSE ton2:=0;
+	END_IF;
+	Warning.1:=Pressure>PressureH AND NOT Error.1;
+	Warning.2:=Pressure<PressureL AND NOT Error.2;
+	IF Pressure>PressureMax THEN
+		PressureMax:=Pressure;
+	ELSIF Pressure<PressureMin AND Valve1 THEN
+		PressureMin:=Pressure;
+	END_IF;
+END_IF;
+
+
+IF Stop THEN ControlState:=0;
+ELSIF NOT Start THEN ControlState:=1;
+END_IF;
+
+CASE Mode OF
+	0:
+		CASE ControlState OF
+			0:
+				IF NOT Stop THEN ControlState:=1; END_IF;
+				Done:=FALSE;
+				Ready:=FALSE;
+			1:
+				Done:=FALSE;
+				Ready:=FALSE;
+				Valve1:=FALSE;
+				Valve2:=FALSE;
+				IF ton1<>0 THEN ton1:=0; END_IF;
+				IF Start THEN ControlState:=2; END_IF;
+			2:
+				ton1:=ton1+1;
+				IF ton1>=(DelayTime*10) THEN
+					Ready:=TRUE;
+					Valve1:=TRUE;
+					Valve2:=TRUE;
+					ControlState:=10;
+					ton1:=0;
+				END_IF;
+			10:
+				Done:=TRUE;
+		END_CASE;
+
+	1:
+		CASE ControlState OF
+			0:
+				IF NOT Stop THEN ControlState:=1; END_IF;
+				Done:=FALSE;
+				Ready:=FALSE;
+			1:
+				Done:=FALSE;
+				Ready:=FALSE;
+				Valve1:=FALSE;
+				Valve2:=FALSE;
+				ValveSafety:=FALSE;
+				ValveIgnition:=FALSE;
+				IF ton1<>0 THEN ton1:=0; END_IF;
+				IF Start THEN ControlState:=2; END_IF;
+			2:
+				ValveSafety:=TRUE;
+				ton1:=ton1+1;
+				IF ton1>=10 THEN
+					ton1:=0;
+					ControlState:=3;					
+				END_IF;
+			3:
+				Valve1:=TRUE;
+				ton1:=ton1+1;
+				IF ton1>=20 THEN
+					Valve1:=FALSE;
+					ton1:=0;
+					ControlState:=4;
+				END_IF;
+			4:
+				ton1:=ton1+1;
+				IF ton1>=(DelayTime*10) THEN
+					ton1:=0;
+					ControlState:=5;
+				END_IF;
+			5:
+				Ready:=TRUE;
+				Valve1:=TRUE;
+				ton1:=ton1+1;
+				IF ton1>=10 THEN
+					ton1:=0;
+					ControlState:=6;
+				END_IF;
+			6:
+				ValveIgnition:=TRUE;
+				ton1:=ton1+1;
+				IF ton1>=IgnitionDelay*10 THEN
+					ton1:=0;
+					ControlState:=7;
+				END_IF;
+			7:
+				Valve2:=TRUE;
+				ton1:=ton1+1;
+				IF ton1>=IgnitionTime*10 THEN
+					ValveIgnition:=FALSE;
+					ton1:=0;
+					ControlState:=10;
+				END_IF;
+			10:
+				Done:=TRUE;
+		END_CASE;
+END_CASE;
+
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Drivers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriverMessage
+
+VAR_INPUT
+	GasRegValveErrors:BYTE;
+	GasRegValveWarnings:BYTE;
+	AirRegValveErrors:BYTE;
+	AirRegValveWarnings:BYTE;
+	GasValveErrors:BYTE;
+	GasValveWarnings:BYTE;
+	FunErrors:BYTE;
+	FunWarnings:BYTE;
+	BurnerErrors:BYTE;
+	BurnerWarnings:BYTE;
+	FaultReset:BOOL;
+END_VAR
+
+VAR_OUTPUT
+	NumberMessage:BYTE;
+	health:BOOL;
+	ShutDown:BOOL;
+	Alarm:BOOL;
+	Warning:BOOL;
+END_VAR
+
+VAR
+	healthOld:BOOL;
+	trgr:BYTE;
+	i: BYTE;
+	j: BYTE;
+	k:BYTE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+Health:=GasRegValveErrors=0 AND AirRegValveErrors=0 AND GasValveErrors=0 AND FunErrors=0 AND BurnerErrors=0;
+trgr.0:=Health<>HealthOld;
+HealthOld:=Health;
+
+IF trgr.0 OR FaultReset THEN
+	IF GasRegValveErrors.0 THEN NumberMessage:=1;
+	ELSIF GasRegValveErrors.1 THEN NumberMessage:=2;
+	ELSIF BurnerErrors.3 THEN NumberMessage:=19;
+	ELSIF AirRegValveErrors.0 THEN NumberMessage:=3;
+	ELSIF AirRegValveErrors.1 THEN NumberMessage:=4;
+	ELSIF GasValveErrors.0 THEN NumberMessage:=5;
+	ELSIF GasValveErrors.1 THEN NumberMessage:=6;
+	ELSIF GasValveErrors.2 THEN NumberMessage:=7;
+	ELSIF FunErrors.1 THEN NumberMessage:=11;
+	ELSIF FunErrors.2 THEN NumberMessage:=12;
+	ELSIF BurnerErrors.0 THEN NumberMessage:=15;
+	ELSIF BurnerErrors.1 THEN NumberMessage:=16;
+	ELSIF BurnerErrors.2 THEN NumberMessage:=17;
+	ELSIF GasValveErrors.3 THEN  NumberMessage:=18;
+	ELSIF GasValveWarnings.1 THEN NumberMessage:=8;
+	ELSIF GasValveWarnings.2 THEN NumberMessage:=9;
+	ELSIF FunWarnings.0 THEN NumberMessage:=10;
+	ELSIF FunWarnings.1 THEN NumberMessage:=13;
+	ELSIF FunWarnings.2 THEN NumberMessage:=14;
+	ELSE NumberMessage:=0;
+	END_IF;
+END_IF;
+
+
+(*
+
+
+
+
+		CurrentMessageProcedure(
+			Message:='Заслонка Газа Ошибка движения',
+			CurrentMessages:=CurrentMessages,
+			Counter:=CountMessages);
+	END_IF;
+
+	IF GasRegValveErrors.1 THEN
+		CurrentMessageProcedure(
+			Message:='Заслонка Газа Ошибка датчика',
+			CurrentMessages:=CurrentMessages,
+			Counter:=CountMessages);
+	END_IF;
+
+	IF AirRegValveErrors.0 THEN
+		CurrentMessageProcedure(
+			Message:='Заслонка Воздуха Ошибка движения',
+			CurrentMessages:=CurrentMessages,
+			Counter:=CountMessages);
+	END_IF;
+
+	IF AirRegValveErrors.1 THEN
+		CurrentMessageProcedure(
+			Message:='Заслонка Воздуха Ошибка датчика',
+			CurrentMessages:=CurrentMessages,
+			Counter:=CountMessages);
+	END_IF;
+
+END_IF;
+
+IF Health AND NOT trgr.1 THEN
+	trgr.1:=TRUE;
+	FOR i:=1 TO 10 DO
+		CurrentMessages[i]:='';
+	END_FOR;
+ELSIF NOT Health THEN trgr.1:=FALSE;
+END_IF;*)
+
+
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Interface' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriverHMI
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	starting:BOOL;
+	kbrd_old:WORD;
+	trgr:BYTE;
+	mode:BYTE:=0;					(*0 - индикация; 1..4 - изменение значений*)
+	tmp1:STRING;
+	tmp2:STRING;
+	tmp3:STRING;
+	tmp4:INT;
+	ControlModeOld:BYTE;
+	ton1:INT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+IF NOT starting THEN							(*то что выполняется один раз при запуске программы*)
+	Clear_Display(SINGLE_MODE);               (*очищаем экран*)
+	Switch_To_Single_Mode();                       (*переходим в монопольный режим*)
+	starting:=TRUE;
+	FaultReset:=TRUE;
+END_IF;
+
+(*Инициализация клавиатуры*)
+key_f1:=kbrd.0;
+key_f2:=kbrd.1;
+key_f3:=kbrd.8;
+key_start:=kbrd.5;
+key_alt:=kbrd.7;
+key_exit:=kbrd.6;
+key_up:=kbrd.3;
+key_down:=kbrd.2;
+key_enter:=kbrd.4;
+
+IF scrn>=160 AND scrn<200 AND ControlMode<>3 THEN
+	ControlModeOld:=ControlMode;
+	ControlMode:=3;
+ELSIF (scrn<160 OR scrn>=200) AND ControlMode=3 THEN
+	ControlMode:=ControlModeOld;
+END_IF;
+
+trgr.0:=kbrd<>kbrd_old;												(*нажатие клавиш*)
+kbrd_old:=kbrd;
+
+CASE scrn OF															(*выбор окон*)
+
+	0:																	(*окно состояния*)
+		CASE ControlState OF
+			0:
+				tmp1:='Отключена';
+			1..3:
+				tmp1:='Калибровка';
+			4:
+				tmp1:='Продувка';
+			5:
+				tmp1:='Проверка клапанов';
+			6:
+				tmp1:='Розжиг';
+			7:
+				tmp1:='Стабилизация';
+			8:
+				tmp1:='Регулирование';
+			10:
+				tmp1:='Останов';
+			20, 21:
+				tmp1:='Калибровка     Д';
+			22, 23:
+				tmp1:='Продувка      Д';
+			24:
+				tmp1:='Розжиг         Д';
+			25:
+				tmp1:='Стабилизация   Д';
+			26:
+				tmp1:='Регулирование  Д';
+		END_CASE;
+
+		CASE NumberMessage OF
+			0:
+				tmp2:='Норма';
+			1:
+				tmp2:='ЗГ:ош движения';
+			2:
+				tmp2:='ЗГ:ош датчика';
+			3:
+				tmp2:='ЗВ:ош движения';
+			4:
+				tmp2:='ЗВ:ош датчика';
+			5:
+				tmp2:='Газ:ош датчика';
+			6:
+				tmp2:='Газ:ВВ давление';
+			7:
+				tmp2:='Газ/НН давление';
+			8:
+				tmp2:='Газ:В давление';
+			9:
+				tmp2:='Газ:Н давление';
+			10:
+				tmp2:='Взд:ош датчика';
+			11:
+				tmp2:='Взд:ВВ давление';
+			12:
+				tmp2:='Взд:НН давление';
+			13:
+				tmp2:='Взд:В давление';
+			14:
+				tmp2:='Взд:Н давление';
+			15:
+				tmp2:='Горелка открыта';
+			16:
+				tmp2:='Посторонний свет';
+			17:
+				tmp2:='Погасание пламен';
+			18:
+				tmp2:='Ош герметичности';
+			19:
+				tmp2:='Ош задания';
+		END_CASE;
+
+		IF NOT OilMode THEN
+			IF ControlMode<>2 THEN
+				tmp3:='Газ=   %Мощ=   %'; tmp4:=GasRegulatorSetPoint;
+			ELSE
+				tmp3:='Газ=   %TEk=   '; tmp4:=REAL_TO_INT(HeatTemperature);
+			END_IF;
+			tmp4:=REAL_TO_INT(GasRegValve.CurrentPosition);
+		ELSE
+			IF ControlMode<>2 THEN
+				tmp3:='Диз=   %Мощ=   %'; tmp4:=GasRegulatorSetPoint;
+			ELSE
+				tmp3:='Диз=   %TEk=   '; tmp4:=REAL_TO_INT(HeatTemperature);
+			END_IF;
+			IF Valve3 THEN tmp4:=100; ELSIF Valve2 THEN tmp4:=60; ELSIF Valve1 THEN tmp4:=40; ELSE tmp4:=0; END_IF;
+		END_IF;
+
+		IF mode<>0 THEN mode:=2; END_IF;
+		Screen(row1:= tmp1 , row2:=tmp3 , row3:='Взд=   %Р=   0Па', row4:=tmp2, sp1:=tmp4, sp2:=GasRegulatorSetPoint, sp3:= REAL_TO_INT(AirValve.CurrentPosition), sp4:=AirPressure/10, mode:=mode);
+		IF mode=2 AND trgr.0 THEN IF key_up THEN GasRegulatorSetPoint:=GasRegulatorSetPoint+1; ELSIF key_down THEN GasRegulatorSetPoint:=GasRegulatorSetPoint-1; END_IF; END_IF;
+
+
+(*
+		IF ControlMode<>2 THEN
+			tmp3:='Газ=   %Мощ=   %'; tmp4:=GasRegulatorSetPoint;
+		ELSE
+			tmp3:='Газ=   %TEk=   '; tmp4:=REAL_TO_INT(HeatTemperature);
+		END_IF;
+		IF mode<>0 THEN mode:=2; END_IF;
+		Screen(row1:= tmp1 , row2:=tmp3 , row3:='Взд=   %Р=   0Па', row4:=tmp2, sp1:=REAL_TO_INT(GasRegValve.CurrentPosition), sp2:=tmp4, sp3:= REAL_TO_INT(AirValve.CurrentPosition), sp4:=AirPressure/10, mode:=mode);
+		IF mode=2 AND trgr.0 THEN IF key_up THEN GasRegulatorSetPoint:=GasRegulatorSetPoint+1; ELSIF key_down THEN GasRegulatorSetPoint:=GasRegulatorSetPoint-1; END_IF; END_IF;
+	*)(**********Окна общих настроек**********)
+	100:
+		CASE ControlMode OF
+			0:
+				tmp1:='Удаленный';
+				IF mode=1 AND trgr.0 AND key_up THEN ControlMode:=ControlMode+1; END_IF;
+			1:
+				tmp1:='Местный';
+				IF mode=1 AND trgr.0 AND key_up THEN ControlMode:=ControlMode+1; END_IF;
+				IF mode=1 AND trgr.0 AND key_down THEN ControlMode:=ControlMode-1; END_IF;
+			2:
+				tmp1:='Котел';
+				IF mode=1 AND trgr.0 AND key_down THEN ControlMode:=ControlMode-1; END_IF;
+		END_CASE;
+		Screen(row1:= 'Настройка' , row2:='Выбор управления' , row3:=tmp1 , row4:='           режим', mode:=mode);
+	101:
+		Screen(row1:= 'Настройка' , row2:='Заслонка воздуха' , row3:='Диапазон' , row4:='отклонений=   %', sp1:=AirValveDeadBand, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN AirValveDeadBand:=AirValveDeadBand+1; ELSIF key_down THEN AirValveDeadBand:=AirValveDeadBand-1; END_IF;
+			END_CASE;
+		END_IF;
+		(*Screen(row1:= 'Настройка' , row2:='Заслонка воздуха' , row3:='Разница<=    %' , row4:='ВрОшибки=    с', sp1:=AirValveDiscrepancy, sp2:=AirValveFaultTime, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN AirValveDiscrepancy:=AirValveDiscrepancy+1; ELSIF key_down THEN AirValveDiscrepancy:=AirValveDiscrepancy-1; END_IF;
+				2:	IF key_up THEN AirValveFaultTime:=AirValveFaultTime+1; ELSIF key_down THEN AirValveFaultTime:=AirValveFaultTime-1; END_IF;
+			END_CASE;
+		END_IF;*)
+	102:
+		Screen(row1:= 'Настройка' , row2:='Заслонка воздуха' , row3:='Время хода=   с' , row4:='ВрОшибки =   с', sp1:=AirValveRunningTime, sp2:=AirValveFaultTime, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN AirValveRunningTime:=AirValveRunningTime+1; ELSIF key_down THEN AirValveRunningTime:=AirValveRunningTime-1; END_IF;
+				2:	IF key_up THEN AirValveFaultTime:=AirValveFaultTime+1; ELSIF key_down THEN AirValveFaultTime:=AirValveFaultTime-1; END_IF;
+			END_CASE;
+		END_IF;
+		(*Screen(row1:= 'Настройка' , row2:='Заслонка воздуха' , row3:='Максимум=    %' , row4:='Минимум=    %', sp1:=AirValveSetPointMax, sp2:=AirValveSetPointMin, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN AirValveSetPointMax:=AirValveSetPointMax+1; ELSIF key_down THEN AirValveSetPointMax:=AirValveSetPointMax-1; END_IF;
+				2:	IF key_up THEN AirValveSetPointMin:=AirValveSetPointMin+1; ELSIF key_down THEN AirValveSetPointMin:=AirValveSetPointMin-1; END_IF;
+			END_CASE;
+		END_IF;*)
+	103:
+		Screen(row1:= 'Настройка' , row2:='Давление воздуха' , row3:='ВВ (ав)=   0 Па' , row4:='В  (пр)=   0 Па', sp1:=FunPressureHH/10, sp2:=FunPressureH/10, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN FunPressureHH:=FunPressureHH+10; ELSIF key_down THEN FunPressureHH:=FunPressureHH-10; END_IF;
+				2:	IF key_up THEN FunPressureH:=FunPressureH+10; ELSIF key_down THEN FunPressureH:=FunPressureH-10; END_IF;
+			END_CASE;
+		END_IF;
+	104:
+		Screen(row1:= 'Настройка' , row2:='Давление воздуха' , row3:='Н  (пр)=   0 Па' , row4:='НН (ав)=   0 Па', sp1:=FunPressureL/10, sp2:=FunPressureLL/10, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN FunPressureL:=FunPressureL+10; ELSIF key_down THEN FunPressureL:=FunPressureL-10; END_IF;
+				2:	IF key_up THEN FunPressureLL:=FunPressureLL+10; ELSIF key_down THEN FunPressureLL:=FunPressureLL-10; END_IF;
+			END_CASE;
+		END_IF;
+	105:
+		Screen(row1:= 'Настройка' , row2:='Давление воздуха' , row3:='Задержка на' , row4:='проверку=    с', sp1:=FunDelayTimeForCheking, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN FunDelayTimeForCheking:=FunDelayTimeForCheking+1; ELSIF key_down THEN FunDelayTimeForCheking:=FunDelayTimeForCheking-1; END_IF;
+			END_CASE;
+		END_IF;
+	106:
+		Screen(row1:= 'Настройка' , row2:='Заслонка газа' , row3:='Диапазон' , row4:='отклонений=   %', sp1:=GasRegValveDeadBand, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN GasRegValveDeadBand:=GasRegValveDeadBand+1; ELSIF key_down THEN GasRegValveDeadBand:=GasRegValveDeadBand-1; END_IF;
+			END_CASE;
+		END_IF;
+	107:
+		Screen(row1:= 'Настройка' , row2:='Заслонка газа' , row3:='Время хода=   с' , row4:='ВрОшибки =   с', sp1:=GasRegValveRunningTime, sp2:=GasRegValveFaultTime, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN GasRegValveRunningTime:=GasRegValveRunningTime+1; ELSIF key_down THEN GasRegValveRunningTime:=GasRegValveRunningTime-1; END_IF;
+				2:	IF key_up THEN GasRegValveFaultTime:=GasRegValveFaultTime+1; ELSIF key_down THEN GasRegValveFaultTime:=GasRegValveFaultTime-1; END_IF;
+			END_CASE;
+		END_IF;
+	108:
+		Screen(row1:= 'Настройка' , row2:='ТемпКотла=   Гр' , row3:='ДиапВерх=   Гр' , row4:='ДиапНиз=   Гр', sp1:=REAL_TO_INT(HeatTemperature), sp2:=HeatTemperatureHH, sp3:=HeatTemperatureLL, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	mode:=2;
+				2:	IF key_up THEN HeatTemperatureHH:=HeatTemperatureHH+1; ELSIF key_down THEN HeatTemperatureHH:=HeatTemperatureHH-1; END_IF;
+				3:	IF key_up THEN HeatTemperatureLL:=HeatTemperatureLL+1; ELSIF key_down THEN HeatTemperatureLL:=HeatTemperatureLL-1; END_IF;
+			END_CASE;
+		END_IF;
+	109:
+		Screen(row1:= 'Настройка' , row2:='ТемпКотла=   Гр' , row3:='Задание=   Гр' , row4:='ТЕ откл=   Гр', sp1:=REAL_TO_INT(HeatTemperature), sp2:=HeatTemperatureSP,  sp3:=HeatTemperatureOff,  mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	mode:=2;
+				2:	IF key_up THEN HeatTemperatureSP:=HeatTemperatureSP+1; ELSIF key_down THEN HeatTemperatureSP:=HeatTemperatureSP-1; END_IF;
+				3:	IF key_up THEN HeatTemperatureOff:=HeatTemperatureOff+1; ELSIF key_down THEN HeatTemperatureOff:=HeatTemperatureOff-1; END_IF;
+			END_CASE;
+		END_IF;
+	110:
+		Screen(row1:= 'Настройка' , row2:='ТемпКотла=   Гр' , row3:='РегП=   РегИ=' , row4:='РегД=', sp1:=REAL_TO_INT(HeatTemperature), sp2:=HeaterTemperatureRegP, sp3:=HeaterTemperatureRegI, sp4:=HeaterTemperatureRegD,  mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	mode:=2;
+				2:	IF key_up THEN HeaterTemperatureRegP:=HeaterTemperatureRegP+1; ELSIF key_down THEN HeaterTemperatureRegP:=HeaterTemperatureRegP-1; END_IF;
+				3:	IF key_up THEN HeaterTemperatureRegI:=HeaterTemperatureRegI+1; ELSIF key_down THEN HeaterTemperatureRegI:=HeaterTemperatureRegI-1; END_IF;
+				4:	IF key_up THEN HeaterTemperatureRegD:=HeaterTemperatureRegD+1; ELSIF key_down THEN HeaterTemperatureRegD:=HeaterTemperatureRegD-1; END_IF;
+			END_CASE;
+		END_IF;
+	111:
+		Screen(row1:= 'Настройка' , row2:='Горелка:продувка' , row3:='Звзд =    %' , row4:='Время =    с', sp1:=AirValveStartSP, sp2:=StartDelayTime, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN AirValveStartSP:=AirValveStartSP+1; ELSIF key_down THEN AirValveStartSP:=AirValveStartSP-1; END_IF;
+				2:	IF key_up THEN StartDelayTime:=StartDelayTime+1; ELSIF key_down THEN StartDelayTime:=StartDelayTime-1; END_IF;
+			END_CASE;
+		END_IF;
+	112:
+		Screen(row1:= 'Настройка' , row2:='Горелка:  розжиг' , row3:='ВрРозжига =    с' , row4:='ВрСтабил=    с', sp1:=IgnitionDelayTime, sp2:=StabilizationDelayTime, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN IgnitionDelayTime:=IgnitionDelayTime+1; ELSIF key_down THEN IgnitionDelayTime:=IgnitionDelayTime-1; END_IF;
+				2:	IF key_up THEN StabilizationDelayTime:=StabilizationDelayTime+1; ELSIF key_down THEN StabilizationDelayTime:=StabilizationDelayTime-1; END_IF;
+			END_CASE;
+		END_IF;
+	113:
+		Screen(row1:= 'Настройка' , row2:='Горелка:останов' , row3:='Звзд =    %' , row4:='Время =    с', sp1:=AirValveStopSP, sp2:=StopDelayTime, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN AirValveStopSP:=AirValveStopSP+1; ELSIF key_down THEN AirValveStopSP:=AirValveStopSP-1; END_IF;
+				2:	IF key_up THEN StopDelayTime:=StopDelayTime+1; ELSIF key_down THEN StopDelayTime:=StopDelayTime-1; END_IF;
+			END_CASE;
+		END_IF;
+
+	(**********Окна настроек контрольных точек**********)
+	130:
+		Screen(row1:= 'КонтрольнТочки' , row2:='ВздРозжига=    %' , row3:='ГазРозжига=    %' , row4:='', sp1:=Air0, sp2:=Gas0, sp3:=, mode:=mode );
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Air0:=Air0+1; ELSIF key_down THEN Air0:=Air0-1; END_IF;
+				2:	IF key_up THEN Gas0:=Gas0+1; ELSIF key_down THEN Gas0:=Gas0-1; END_IF;
+			END_CASE;
+		END_IF;
+	131:
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 1 =    %' , row3:='Газ 1 =       %' , row4:='', sp1:=Air1, sp2:=Gas1, sp3:=, mode:=mode );
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Air1:=Air1+1; ELSIF key_down THEN Air1:=Air1-1; END_IF;
+				2:	IF key_up THEN Gas1:=Gas1+1; ELSIF key_down THEN Gas1:=Gas1-1; END_IF;
+			END_CASE;
+		END_IF;
+	132:
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 2 =    %' , row3:='Газ 2 =       %' , row4:='', sp1:=Air2, sp2:=Gas2, sp3:=, mode:=mode );
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Air2:=Air2+1; ELSIF key_down THEN Air2:=Air2-1; END_IF;
+				2:	IF key_up THEN Gas2:=Gas2+1; ELSIF key_down THEN Gas2:=Gas2-1; END_IF;
+			END_CASE;
+		END_IF;
+	133:
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 3 =    %' , row3:='Газ 3 =       %' , row4:='', sp1:=Air3, sp2:=Gas3, sp3:=, mode:=mode );
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Air3:=Air3+1; ELSIF key_down THEN Air3:=Air3-1; END_IF;
+				2:	IF key_up THEN Gas3:=Gas3+1; ELSIF key_down THEN Gas3:=Gas3-1; END_IF;
+			END_CASE;
+		END_IF;
+	134:
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 4 =    %' , row3:='Газ 4 =       %' , row4:='', sp1:=Air4, sp2:=Gas4, sp3:=, mode:=mode );
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Air4:=Air4+1; ELSIF key_down THEN Air4:=Air4-1; END_IF;
+				2:	IF key_up THEN Gas4:=Gas4+1; ELSIF key_down THEN Gas4:=Gas4-1; END_IF;
+			END_CASE;
+		END_IF;
+	135:
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 5 =    %' , row3:='Газ 5 =       %' , row4:='', sp1:=Air5, sp2:=Gas5, sp3:=, mode:=mode );
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Air5:=Air5+1; ELSIF key_down THEN Air5:=Air5-1; END_IF;
+				2:	IF key_up THEN Gas5:=Gas5+1; ELSIF key_down THEN Gas5:=Gas5-1; END_IF;
+			END_CASE;
+		END_IF;
+	136:
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 6 =    %' , row3:='Газ 6 =       %' , row4:='', sp1:=Air6, sp2:=Gas6, sp3:=, mode:=mode );
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Air6:=Air6+1; ELSIF key_down THEN Air6:=Air6-1; END_IF;
+				2:	IF key_up THEN Gas6:=Gas6+1; ELSIF key_down THEN Gas6:=Gas6-1; END_IF;
+			END_CASE;
+		END_IF;
+	137:
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 7 =    %' , row3:='Газ 7 =       %' , row4:='', sp1:=Air7, sp2:=Gas7, sp3:=, mode:=mode );
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Air7:=Air7+1; ELSIF key_down THEN Air7:=Air7-1; END_IF;
+				2:	IF key_up THEN Gas7:=Gas7+1; ELSIF key_down THEN Gas7:=Gas7-1; END_IF;
+			END_CASE;
+		END_IF;
+	138:
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 8 =    %' , row3:='Газ 8 =       %' , row4:='', sp1:=Air8, sp2:=Gas8, sp3:=, mode:=mode );
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Air8:=Air8+1; ELSIF key_down THEN Air8:=Air8-1; END_IF;
+				2:	IF key_up THEN Gas8:=Gas8+1; ELSIF key_down THEN Gas8:=Gas8-1; END_IF;
+			END_CASE;
+		END_IF;
+	139:
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 9 =    %' , row3:='Газ 9 =       %' , row4:='', sp1:=Air9, sp2:=Gas9, sp3:=, mode:=mode );
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Air9:=Air9+1; ELSIF key_down THEN Air9:=Air9-1; END_IF;
+				2:	IF key_up THEN Gas9:=Gas9+1; ELSIF key_down THEN Gas9:=Gas9-1; END_IF;
+			END_CASE;
+		END_IF;
+	140:
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух10 =    %' , row3:='Газ10 =       %' , row4:='', sp1:=Air10, sp2:=Gas10, mode:=mode );
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Air10:=Air10+1; ELSIF key_down THEN Air10:=Air10-1; END_IF;
+				2:	IF key_up THEN Gas10:=Gas10+1; ELSIF key_down THEN Gas10:=Gas10-1; END_IF;
+			END_CASE;
+		END_IF;
+	141:
+		IF NOT GasRegulatorServiceMode THEN
+			tmp1:='Деактивирован';
+			IF mode=1 AND trgr.0 AND key_up THEN GasRegulatorServiceMode:=TRUE; END_IF;
+		ELSE
+			tmp1:='Активирован';
+			IF mode=1 AND trgr.0 AND key_down THEN GasRegulatorServiceMode:=FALSE; END_IF;
+		END_IF;
+		Screen(row1:= '#Сервисный режим' , row2:=tmp1 , row3:= '' , row4:='', mode:=mode);
+	142:
+		Screen(row1:= 'ВремяРегулирован' , row2:='ВрРег =    с' , row3:='' , row4:='', sp1:=GasRegulatorChangingTime, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN GasRegulatorChangingTime:=GasRegulatorChangingTime+1; ELSIF key_down AND GasRegulatorChangingTime>0 THEN GasRegulatorChangingTime:=GasRegulatorChangingTime-1; END_IF;
+			END_CASE;
+		END_IF;
+	143:
+		Screen(row1:= 'КонтрольнТочки' , row2:='Диз топливо' , row3:='Воздух0 =    %' , row4:='Воздух1 =    %', sp1:=AirValveOil0, sp2:=AirValveOil1, mode:=mode );
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN AirValveOil0:=AirValveOil0+1; ELSIF key_down THEN AirValveOil0:=AirValveOil0-1; END_IF;
+				2:	IF key_up THEN AirValveOil1:=AirValveOil1+1; ELSIF key_down THEN AirValveOil1:=AirValveOil1-1; END_IF;
+			END_CASE;
+		END_IF;
+	144:
+		Screen(row1:= 'КонтрольнТочки' , row2:='Диз топливо' , row3:='Воздух2 =    %' , row4:='Воздух3 =    %', sp1:=AirValveOil2, sp2:=AirValveOil3, mode:=mode );
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN AirValveOil2:=AirValveOil2+1; ELSIF key_down THEN AirValveOil2:=AirValveOil2-1; END_IF;
+				2:	IF key_up THEN AirValveOil3:=AirValveOil3+1; ELSIF key_down THEN AirValveOil3:=AirValveOil3-1; END_IF;
+			END_CASE;
+		END_IF;
+
+
+
+	(**********Окна сервисного режима**********)
+	160:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Задание мощности' , row4:='Значение=', sp1:= PowerSP, mode:=mode);
+	161:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Давление воздуха' , row4:='Знач=    0 Па', sp1:= AirPressure/10, mode:=mode);
+	162:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Реле газа вход' , row4:='Знач=', sp1:=BOOL_TO_INT(GasIncomingPressureMax), mode:=mode);
+	163:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Трансформатор' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Trans));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN Trans:=TRUE; ELSIF key_down THEN Trans:=FALSE; END_IF; END_IF;
+	164:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Текущая мощность' , row4:='Задание=', mode:= mode, sp1:= CurrentPower);
+		IF mode=1 AND trgr.0 THEN IF key_up THEN CurrentPower:=CurrentPower+1; ELSIF key_down THEN CurrentPower:=CurrentPower-1; END_IF; END_IF;
+	165:
+		(*Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='' , row4:='Уст=    Зн=', mode:= mode, sp1:= AirValveSet, sp2:= AirValveFB);
+		IF mode=1 AND trgr.0 THEN IF key_up THEN AirValveSet:=AirValveSet+1; ELSIF key_down THEN AirValveSet:=AirValveSet-1; END_IF;  END_IF;*)
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Заслонка воздуха' , row4:='/-/ R=     Om /+/', mode:= mode, sp1:= AirValveFB);
+		IF mode=1 AND trgr.0 THEN AirRegUp:=key_up; AirRegDown:=key_down; END_IF;
+	166:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Концевик' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(LimitSwitch));
+	167:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Сигнал запуска' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(Start));
+	168:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ПЗК1' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValve1));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValve1:=TRUE; ELSIF key_down THEN GasValve1:=FALSE; END_IF; END_IF;
+	169:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ПЗК2' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValve2));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValve2:=TRUE; ELSIF key_down THEN GasValve2:=FALSE; END_IF; END_IF;
+	170:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Газовая заслонка' , row4:='/-/ R=     Om /+/', mode:= mode, sp1:= GasRegValveFB);
+		IF mode=1 AND trgr.0 THEN GasRegUp:=key_up; GasRegDown:=key_down; END_IF;
+	171:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Сигнал работа' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Run));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN Run:=TRUE; ELSIF key_down THEN Run:=FALSE; END_IF; END_IF;
+	172:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Сигнал авария' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Alarm));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN Alarm:=TRUE; ELSIF key_down THEN Alarm:=FALSE; END_IF; END_IF;
+	173:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Пуск вентилятора' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(FunSet));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN FunSet:=TRUE; ELSIF key_down THEN FunSet:=FALSE; END_IF; END_IF;
+	174:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Индикатор Работа' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(RunLed));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN RunLed:=TRUE; ELSIF key_down THEN RunLed:=FALSE; END_IF; END_IF;
+	175:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Индикатор Авария' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(AlarmLed));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN AlarmLed:=TRUE; ELSIF key_down THEN AlarmLed:=FALSE; END_IF; END_IF;
+	176:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Кл-н запальника' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValveIgnition));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValveIgnition:=TRUE; ELSIF key_down THEN GasValveIgnition:=FALSE; END_IF; END_IF;
+	177:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Реле герм-ности' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(GasSafetyPressureMax));
+	178:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Кл-н безоп-ти' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValveSafety));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValveSafety:=TRUE; ELSIF key_down THEN GasValveSafety:=FALSE; END_IF; END_IF;
+	179:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='НасосТоплива' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Pump));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN Pump:=TRUE; ELSIF key_down THEN Pump:=FALSE; END_IF; END_IF;
+	180:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ДизКлапан1' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Valve1));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN Valve1:=TRUE; ELSIF key_down THEN Valve1:=FALSE; END_IF; END_IF;
+	181:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ДизКлапан2' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Valve2));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN Valve2:=TRUE; ELSIF key_down THEN Valve2:=FALSE; END_IF; END_IF;
+	182:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ДизКлапан3' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Valve3));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN Valve3:=TRUE; ELSIF key_down THEN Valve3:=FALSE; END_IF; END_IF;
+	183:
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ВыборДизТоплива' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(OilMode));
+
+
+
+
+
+END_CASE;
+
+IF trgr.0 AND key_alt AND key_enter THEN GasRegInit:=TRUE; END_IF;
+IF ton1<>0 OR GasRegInit THEN
+	ton1:=ton1+1;
+	CASE ton1 OF
+		1..100:		lds_prph.0:=TRUE;
+		101..200:	lds_prph.1:=TRUE;
+		201..300:	lds_prph.2:=TRUE;
+		301..400:	lds_prph.3:=TRUE; lds_prph.0:=FALSE;
+		401..500:	lds_prph.4:=TRUE; lds_prph.1:=FALSE;
+		501..600:	lds_prph.2:=FALSE;
+		601..700:	lds_prph.3:=FALSE;
+		701..800:	lds_prph.4:=FALSE; ton1:=0;
+	END_CASE;
+END_IF;
+
+GasRegValveStop:= ControlMode=3;
+AirValveStop:=ControlMode=3;
+FunStop:=ControlMode=3;
+GasValveStop:=ControlMode=3;
+GasRegulatorStop:=ControlMode=3;
+
+IF mode=0 AND trgr.0 THEN
+	IF key_f1 THEN														(*переход в главное окно*)
+		scrn:=0;
+	ELSIF key_f2 THEN													(*переход в окно настроек*)
+		CASE scrn OF
+			100..129:	IF key_alt AND ControlState=0 THEN scrn:=160; ELSIF NOT key_alt THEN scrn:=130; END_IF;
+			130..159:	IF key_alt AND ControlState=0 THEN scrn:=160; ELSIF NOT key_alt THEN scrn:=100; END_IF;
+		ELSE scrn:=100;
+		END_CASE;
+	END_IF;
+
+	IF key_up THEN
+		CASE scrn OF
+			100..112:	scrn:=scrn+1;
+			113:		scrn:=100;
+			130..143:	scrn:=scrn+1;
+			144:		scrn:=130;
+			160..182:	scrn:=scrn+1;
+			183:		scrn:=160;
+		END_CASE;
+	ELSIF key_down THEN
+		CASE scrn OF
+			100:		scrn:=113;
+			101..113:	scrn:=scrn-1;
+			130:		scrn:=144;
+			131..144:	scrn:=scrn-1;
+			160:		scrn:=183;
+			161..183:	scrn:=scrn-1;
+		END_CASE;
+	END_IF;
+END_IF;
+
+IF key_enter AND trgr.0 THEN IF mode<4 THEN mode:=mode+1; ELSE mode:=1; END_IF;
+ELSIF key_exit AND trgr.0 THEN mode:=0;
+END_IF;
+
+
+IF key_start AND trgr.0 AND scrn>=100 AND key_alt THEN GasRegValveCalibrateEnable:=TRUE; AirValveCalibrateEnable:=TRUE;
+ELSIF key_start AND trgr.0 AND ControlMode=1 AND NOT startcmnd THEN startcmnd:=TRUE;
+ELSIF key_start AND trgr.0 AND ControlMode=1 AND startcmnd THEN startcmnd:=FALSE;
+ELSIF ControlMode=0 THEN startcmnd:=Start; GasRegulatorSetPoint:=PowerSP;
+END_IF;
+
+IF key_f3 AND trgr.0 THEN FaultReset:=TRUE; END_IF;
+lds_prph.5:=FlameSensorState;
+
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Interface' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM HMI
+VAR
+	Driver: DriverHMI;
+END_VAR
+(* @END_DECLARATION := '0' *)
+Driver();
+END_PROGRAM
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Interface' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM Screen
+VAR_INPUT
+	row1:STRING;
+	row2:STRING;
+	row3:STRING;
+	row4:STRING;
+	key_up:BOOL;
+	key_down:BOOL;
+	sp1:INT;
+	sp2:INT;
+	sp3:INT;
+	sp4:INT;
+END_VAR
+
+VAR_IN_OUT
+	mode:BYTE;					(*0 - индикация; 1..4 - изменение значений*)
+END_VAR
+
+VAR
+	row1_old:STRING;
+	row2_old:STRING;
+	row3_old:STRING;
+	row4_old:STRING;
+	i: INT;
+	j:BYTE;								(*количество переменных (на 1 больше)*)
+	a:ARRAY[1..4] OF INT;
+	str:ARRAY[1..4] OF STRING;
+	tmp1:STRING;
+	tmp2:BYTE;
+	tmp3:BYTE;
+	tmp4:BYTE;
+	ton1: BYTE;
+
+	ton2: BYTE;
+	ton3: BYTE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+IF row1<>row1_old OR row2<>row2_old OR row3<>row3_old OR row4<>row4_old THEN
+	Clear_Display(SINGLE_MODE);
+	j:=1;
+	str[1]:=''; str[2]:=''; str[3]:=''; str[4]:='';
+	FOR i:=1 TO LEN(row1) DO
+		IF MID(row1,1,i)='=' THEN
+			a[j]:=100+i;
+			j:=j+1;
+		END_IF;
+	END_FOR;
+	FOR i:=1 TO LEN(row2) DO
+		IF MID(row2,1,i)='=' THEN
+			a[j]:=200+i;
+			j:=j+1;
+		END_IF;
+	END_FOR;
+	FOR i:=1 TO LEN(row3) DO
+		IF MID(row3,1,i)='=' THEN
+			a[j]:=300+i;
+			j:=j+1;
+		END_IF;
+	END_FOR;
+	FOR i:=1 TO LEN(row4) DO
+		IF MID(row4,1,i)='=' THEN
+			a[j]:=400+i;
+			j:=j+1;
+		END_IF;
+	END_FOR;
+END_IF;
+
+CASE j OF
+	1:
+		a[1]:=0; a[2]:=0; a[3]:=0; a[4]:=0;
+	2:
+		a[2]:=0; a[3]:=0; a[4]:=0;
+		str[1]:=INT_TO_STRING(sp1); str[2]:=''; str[3]:=''; str[4]:='';
+	3:
+		a[3]:=0; a[4]:=0;
+		str[1]:=INT_TO_STRING(sp1); str[2]:=INT_TO_STRING(sp2); str[3]:=''; str[4]:='';
+	4:
+		a[4]:=0;
+		str[1]:=INT_TO_STRING(sp1); str[2]:=INT_TO_STRING(sp2); str[3]:=INT_TO_STRING(sp3); str[4]:='';
+	5:
+		str[1]:=INT_TO_STRING(sp1); str[2]:=INT_TO_STRING(sp2); str[3]:=INT_TO_STRING(sp3); str[4]:=INT_TO_STRING(sp4);
+END_CASE;
+row1_old:=row1; row2_old:=row2; row3_old:=row3; row4_old:=row4;
+
+FOR i:=1 TO (j-1) DO
+	IF a[i]>0 THEN
+		IF LEN(str[i])=2 THEN str[i]:=CONCAT(' ',str[i]);
+		ELSIF LEN(str[i])=1 THEN str[i]:=CONCAT('  ',str[i]);
+		END_IF;
+		CASE a[i] OF
+			100..199:
+				 row1:=REPLACE(row1,str[i],3,a[i]-99);
+			200..299:
+				row2:=REPLACE(row2,str[i],3,a[i]-199);
+			300..399:
+				row3:=REPLACE(row3,str[i],3,a[i]-299);
+			400..499:
+				row4:=REPLACE(row4,str[i],3,a[i]-399);
+		END_CASE;
+	END_IF;
+END_FOR;
+
+CASE mode OF
+		0:
+			Write_Display(SINGLE_MODE, 15, 0, ' ');
+		1:
+		IF j<2 THEN; Write_Display(SINGLE_MODE, 15, 0, '$A6');
+		ELSE
+			IF a[mode]>100 AND a[mode]<200 THEN
+				row1:=REPLACE(row1,'/',1,a[mode]-100);
+			ELSIF a[mode]>200 AND a[mode]<300 THEN
+				row2:=REPLACE(row2,'/',1,a[mode]-200);
+			ELSIF a[mode]>300 AND a[mode]<400 THEN
+				row3:=REPLACE(row3,'/',1,a[mode]-300);
+			ELSIF a[mode]>400 AND a[mode]<500 THEN
+				row4:=REPLACE(row4,'/',1,a[mode]-400);
+			END_IF;
+		END_IF;
+	2:
+		IF j<3 THEN mode:=0;
+		ELSE
+			IF a[mode]>100 AND a[mode]<200 THEN
+				row1:=REPLACE(row1,'/',1,a[mode]-100);
+			ELSIF a[mode]>200 AND a[mode]<300 THEN
+				row2:=REPLACE(row2,'/',1,a[mode]-200);
+			ELSIF a[mode]>300 AND a[mode]<400 THEN
+				row3:=REPLACE(row3,'/',1,a[mode]-300);
+			ELSIF a[mode]>400 AND a[mode]<500 THEN
+				row4:=REPLACE(row4,'/',1,a[mode]-400);
+			END_IF;
+		END_IF;
+	3:
+		IF j<4 THEN mode:=0;
+		ELSE
+			IF a[mode]>100 AND a[mode]<200 THEN
+				row1:=REPLACE(row1,'/',1,a[mode]-100);
+			ELSIF a[mode]>200 AND a[mode]<300 THEN
+				row2:=REPLACE(row2,'/',1,a[mode]-200);
+			ELSIF a[mode]>300 AND a[mode]<400 THEN
+				row3:=REPLACE(row3,'/',1,a[mode]-300);
+			ELSIF a[mode]>400 AND a[mode]<500 THEN
+				row4:=REPLACE(row4,'/',1,a[mode]-400);
+			END_IF;
+		END_IF;
+	4:
+		IF j<5 THEN mode:=0;
+		ELSE
+			IF a[mode]>100 AND a[mode]<200 THEN
+				row1:=REPLACE(row1,'/',1,a[mode]-100);
+			ELSIF a[mode]>200 AND a[mode]<300 THEN
+				row2:=REPLACE(row2,'/',1,a[mode]-200);
+			ELSIF a[mode]>300 AND a[mode]<400 THEN
+				row3:=REPLACE(row3,'/',1,a[mode]-300);
+			ELSIF a[mode]>400 AND a[mode]<500 THEN
+				row4:=REPLACE(row4,'/',1,a[mode]-400);
+			END_IF;
+		END_IF;
+END_CASE;
+
+Write_Display(SINGLE_MODE, 0, 0, row1);
+Write_Display(SINGLE_MODE, 0, 1, row2);
+Write_Display(SINGLE_MODE, 0, 2, row3);
+Write_Display(SINGLE_MODE, 0, 3, row4);
+(*
+IF LEN(row2)>16 THEN
+	IF LEN(row2)<16+tmp2 THEN
+		IF ton1=0 THEN tmp2:=0; END_IF;
+		ton1:=ton1+1;
+		IF ton1>15 THEN ton1:=1; tmp2:=tmp2+1; END_IF;
+	ELSE tmp2:=0;
+		Write_Display(SINGLE_MODE, 0, 1, LEFT(DELETE(row2, tmp2, 1), 16));
+	END_IF;
+ELSE
+	ton1:=0;
+	Write_Display(SINGLE_MODE, 0, 1, row2);
+END_IF;
+
+IF LEN(row3)>16 THEN
+	IF LEN(row3)<16+tmp3 THEN
+		IF ton2=0 THEN tmp3:=0; END_IF;
+		ton2:=ton2+1;
+		IF ton2>15 THEN ton2:=1; tmp3:=tmp3+1; END_IF;
+	ELSE tmp3:=0;
+		Write_Display(SINGLE_MODE, 0, 2, LEFT(DELETE(row3, tmp3, 1), 16));
+	END_IF;
+ELSE
+	ton2:=0;
+	Write_Display(SINGLE_MODE, 0, 2, row3);
+END_IF;
+
+IF LEN(row4)>16 THEN
+	IF LEN(row4)<16+tmp4 THEN
+		IF ton3=0 THEN tmp4:=0; END_IF;
+		ton3:=ton3+1;
+		IF ton3>15 THEN ton3:=1; tmp4:=tmp4+1; END_IF;
+	ELSE tmp3:=0;
+		Write_Display(SINGLE_MODE, 0, 3, LEFT(DELETE(row4, tmp4, 1), 16));
+	END_IF;
+ELSE
+	ton3:=0;
+	Write_Display(SINGLE_MODE, 0, 3, row4);
+END_IF;
+
+*)
+
+
+
+END_PROGRAM
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM CurrentMessageProcedure
+VAR_INPUT
+	Message:STRING;
+END_VAR
+
+VAR_IN_OUT
+	CurrentMessages:ARRAY [1..10] OF STRING;
+	Counter: BYTE;
+END_VAR
+
+VAR
+	i: BYTE;
+	j:BYTE;
+	k:BYTE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+FOR i:=1 TO 9 DO
+	j:=11-i;
+	k:=10-i;
+	CurrentMessages[j]:=CurrentMessages[k];
+END_FOR;
+IF Counter<10 THEN Counter:=Counter+1; END_IF;
+CurrentMessages[1]:=Message;
+END_PROGRAM
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM Periphery
+VAR
+	COM_SERVICE1: COM_SERVICE;	   (*ФБ открытия порта*)
+	port_opened:  BYTE := 0;				(*состояние порта*)
+	Settings:COMSETTINGS;				(* настройки последовательного порта *)
+      	com_num: PORTS:=1;				(*0 - RS-485, 1 - RS-232*)
+	send2_modbus: MB_WR_REGS;         (*функция 16 - запись параметров*)
+	get1_modbus: MB_RD_HOLD_REGS;    (*функция 03 - чтение параметра типа INT*)
+	Buffer: ARRAY[0..255] OF BYTE;		(* байтовый буфер данных *)
+     	cmpl: BOOL;
+	Init: BOOL;								(* признак инициализации пользовательской программы *)
+	enabl: BOOL;							(*состояние работы блока*)
+	err: INT;								(*номер ошибки*)
+	TimeOut: TIME:=T#100ms;				(*таймаут*)
+	Exception: BYTE;
+	DataSize: WORD;
+	master1: BYTE:= 1;
+	t: DWORD;						(*переменная для организации счетчика*)
+	A: WORD := 0;					(*счетчик*)
+	x:WORD;						(*считанное значение*)
+	x1: WORD;						(*переменная для записи по сети*)
+	x2: WORD;						(*переменная для записи по сети*)
+	x3: WORD;						(*переменная для записи по сети*)
+	d:  REAL;						(*считанное значение*)
+	ptr_D:POINTER TO BYTE;
+	Modbus_prph:INT;
+
+END_VAR
+(* @END_DECLARATION := '0' *)
+(*Устанавливаем настройки COM-порта*)
+IF port_opened=0 THEN
+		Settings.Port:=com_num;
+		Settings.dwBaudRate:=9600;
+		Settings.byParity:=0;
+		Settings.dwTimeout:=0;
+		Settings.byStopBits:=0;
+		Settings.dwBufferSize:=0;
+		Settings.dwScan:=0;
+END_IF
+COM_SERVICE1(Enable:=(port_opened=0) , Settings:=Settings , Task:=OPEN_TSK  );
+
+Trans_prph:=BOOL_TO_REAL(Trans);
+CurrentPower_prph:=CurrentPower;
+AirValve_prph:=INT_TO_REAL(AirValveSet)/100.0;
+Modbus_prph.0:=GasValve1;
+Modbus_prph.1:=GasValve2;
+Modbus_prph.2:=GasValveSafety;
+Modbus_prph.3:=GasValveIgnition;
+Modbus_prph.4:=GasRegUp;
+Modbus_prph.5:=GasRegDown;
+(*Modbus_prph.8:=Run;
+Modbus_prph.9:=Alarm;*)
+Modbus_prph.11:=FunSet;
+Modbus_prph.12:=AirRegUp;
+Modbus_prph.13:=AirRegDown;
+Modbus_prph.14:=RunLed;
+Modbus_prph.15:=AlarmLed;
+Modbus_prph.6:=Pump;(*насос*)
+Modbus_prph.8:=Valve3;(*ст3*)
+Modbus_prph.9:=Valve2;(*ст2*)
+Modbus_prph.10:=Valve1;(*ст1*)
+
+LimitSwitch:=LimitSwitch_prph;
+Start:=Start_prph;
+AirValveFB:=REAL_TO_INT (AirValveFB_prph);
+GasRegValveFB:=REAL_TO_INT (GasRegValveFB_prph);
+IF ControlMode<>2 THEN
+	PowerSP:=REAL_TO_INT (PowerSP_prph);
+	HeatTemperature:=HeatTemperatureSP;
+ELSE
+	HeatTemperature:=(PowerSP_prph*INT_TO_REAL(HeatTemperatureHH-HeatTemperatureLL)/100.0)+INT_TO_REAL(HeatTemperatureLL);
+END_IF;
+AirPressure:=REAL_TO_INT (AirPressure_prph*40.0);
+
+
+
+
+
+
+
+
+IF COM_SERVICE1.ready THEN
+	port_opened:=2;
+
+	Buffer[1] := DINT_TO_BYTE(Modbus_prph);
+	Buffer[0] := DINT_TO_BYTE( SHR(Modbus_prph,8));
+	send2_modbus(
+		Enable:= TRUE,			(* разрешение работы блока *)
+		Mode:=MB_RTU ,		(*режим передачи*)
+		DevAddr:=16 , 				(*адрес*)
+		FirstAddr:= 50, 				(*номер регистра*)
+		Quantity:= 1,   				(*количество записываемых регистров*)
+		ComHandle:=Settings.Port ,(*номер сом-порта*)
+		TimeOut:=TimeOut ,		(*таймаут T#50ms*)
+		Buffer:=Buffer ,			(* буфер данных *)
+		Complete=>cmpl ,		(* скопировать признак завершения операции *)
+		Exception=>err ,			(* скопировать регистр ошибок *)
+		RegCnt=> DataSize);		(*кол-во считанных байтов *)
+	(*если установлен признак завершения операции, то *)
+END_IF
+IF port_opened<>2 AND port_opened<>0 THEN port_opened:=0; END_IF;
+
+
+
+
+
+END_PROGRAM
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM PLC_PRG
+VAR
+	tmp1:BYTE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+IF tmp1<50 THEN
+	tmp1:=tmp1+1;
+ELSE
+
+FlameSensor(
+	Mode:=FlameSensorMode,
+	CheckingTime:=FlameSensorCheckingTime,
+	Simulate:=FlameSensorSim,
+	FeedBack:=FlameSensor_prph,
+	Beat=>FlameSensorBeat_prph ,
+	CurrentState=>FlameSensorState);
+
+GasRegValve(
+	FeedBack:=GasRegValveFB,
+	FeedBackBeat:=GasRegValveFB_prphBeat,
+	SetPoint:=GasRegValveSetPoint,
+	DeadBand:=GasRegValveDeadBand,
+	Gain:=GasRegValveGain,
+	RunningTime:=GasRegValveRunningTime,
+	FaultTime:=GasRegValveFaultTime,
+	Stop:=GasRegValveStop,
+	Reset:=FaultReset,
+	CalibrateEnable:=GasRegValveCalibrateEnable,
+	FeedBackMax:=GasRegValveFeedBackMax,
+	FeedBackMin:=GasRegValveFeedBackMin,
+	ChangingSpeed:=GasRegValveChangingSpeed,
+	CalibrateComplete:=GasRegValveCalibrateComplete,
+	SetUp:=GasRegUp,
+	SetDown:=GasRegDown,
+	CurrentPosition=>,
+	Error=>GasRegValveError);
+
+AirValve(
+	FeedBack:=AirValveFB,
+	FeedBackBeat:=AirValveFB_prphBeat,
+	SetPoint:=AirValveSetPoint,
+	DeadBand:=AirValveDeadBand,
+	Gain:=AirValveGain,
+	RunningTime:=AirValveRunningTime,
+	FaultTime:=AirValveFaultTime,
+	Stop:=AirValveStop,
+	Reset:=FaultReset,
+	CalibrateEnable:=AirValveCalibrateEnable,
+	FeedBackMax:=AirValveFeedBackMax,
+	FeedBackMin:=AirValveFeedBackMin,
+	ChangingSpeed:=AirValveChangingSpeed,
+	CalibrateComplete:=AirValveCalibrateComplete,
+	SetUp:=AirRegUp,
+	SetDown:=AirRegDown,
+	Done=>AirValveDone,
+	CurrentPosition=>,
+	Error=>AirValveError);
+
+Fun(
+	Pressure:=AirPressure,
+	PressureBeat:=AirPressure_prphBeat,
+	DelayTimeForCheking:=FunDelayTimeForCheking,
+	PressureHH:=FunPressureHH,
+	PressureH:=FunPressureH,
+	PressureL:=FunPressureL,
+	PressureLL:=FunPressureLL,
+	Start:=FunStart,
+	Stop:=FunStop,
+	Reset:=FaultReset,
+	PressureMax:=FunPressureMax,
+	PressureMin:=FunPressureMin,
+	Set:=FunSet,
+	Warning=>FunWarning,
+	Error=>FunError);
+
+GasValve(
+	Mode:=1,
+(*	Pressure:=GasPressure,
+	PressureBeat:=GasPressure_prphBeat,
+	PressureHH:=GasValvePressureHH,
+	PressureH:=GasValvePressureH,
+	PressureL:=GasValvePressureL,
+	PressureLL:=GasValvePressureLL,*)
+	DelayTime:=GasValveDelayTime,
+	IgnitionDelay:=GasValveIgnitionDelay,
+	IgnitionTime:=GasValveIgnitionTime,
+	IncomingPressureMax:=NOT GasIncomingPressureMax,
+	IncomingPressureMin:=,
+	SafetyPressureMax:=GasSafetyPressureMax,
+	Start:=GasValveStart,
+	Stop:=GasValveStop,
+	Reset:=FaultReset,
+	PressureMax:=GasValvePressureMax,
+	PressureMin:=GasValvePressureMin,
+	Valve1:=GasValve1,
+	Valve2:=GasValve2,
+	ValveSafety:=GasValveSafety,
+	ValveIgnition:=GasValveIgnition,
+	Done=>GasValveDone,
+	Ready=>GasValveReady ,
+	Warning=>GasValveWarning,
+	Error=>GasValveError);
+
+IF ControlMode=2 THEN
+BoilerControl(
+	StartIn:=Start,
+	RegStart:=GasRegulatorStart,
+	PV:=HeatTemperature,
+	Beat:=PowerSP_prphBeat,
+	SP:=INT_TO_REAL(HeatTemperatureSP),
+	DB:=HeaterTemperatureRegDB,
+	Xp:=INT_TO_REAL(HeaterTemperatureRegP)/100.0,
+	Xi:=INT_TO_REAL(HeaterTemperatureRegI)/1000.0,
+	Xd:=INT_TO_REAL(HeaterTemperatureRegD)/100.0,
+	Off:=HeatTemperatureOff ,
+	StartOut=>startcmnd,
+	Y=>GasRegulatorSetPoint);
+END_IF;
+
+IF GasRegInit THEN
+	GasRegValveSPs[0]:=Gas0; AirRegValveSPs[0]:=Air0;
+	GasRegValveSPs[1]:=Gas1; AirRegValveSPs[1]:=Air1;
+	GasRegValveSPs[2]:=Gas2; AirRegValveSPs[2]:=Air2;
+	GasRegValveSPs[3]:=Gas3; AirRegValveSPs[3]:=Air3;
+	GasRegValveSPs[4]:=Gas4; AirRegValveSPs[4]:=Air4;
+	GasRegValveSPs[5]:=Gas5; AirRegValveSPs[5]:=Air5;
+	GasRegValveSPs[6]:=Gas6; AirRegValveSPs[6]:=Air6;
+	GasRegValveSPs[7]:=Gas7; AirRegValveSPs[7]:=Air7;
+	GasRegValveSPs[8]:=Gas8; AirRegValveSPs[8]:=Air8;
+	GasRegValveSPs[9]:=Gas9; AirRegValveSPs[9]:=Air9;
+	GasRegValveSPs[10]:=Gas10; AirRegValveSPs[10]:=Air10;
+END_IF;
+
+GasRegulator(
+	Start:=GasRegulatorStart,
+	Stop:=GasRegulatorStop,
+	ServiceMode:=GasRegulatorServiceMode,
+	GasValveDone:=GasRegValve.Done,
+	GasCurrentPosition:=GasRegValve.CurrentPosition,
+	ChangingTime:=GasRegulatorChangingTime,
+	GasSPs:=GasRegValveSPs,
+	AirSPs:=AirRegValveSPs,
+	Init:=GasRegInit,
+	SetPoint:=GasRegulatorSetPoint,
+	GasCurrentSP:=GasRegValveSetPoint,
+	AirCurrentSP:=AirValveSetPoint,
+	CurrentPoint=>CurrentPower,
+	Changing=>GasRegulatorChanging,
+	Done=>GasRegulatorDone);
+
+
+
+Messages(
+	GasRegValveErrors:=GasRegValveError,
+	GasRegValveWarnings:= ,
+	AirRegValveErrors:=AirValveError,
+	AirRegValveWarnings:= ,
+	GasValveErrors:=GasValveError ,
+	GasValveWarnings:=GasValveWarning,
+	FunErrors:=FunError,
+	FunWarnings:=FunWarning,
+	BurnerErrors:=BurnerErrors,
+	BurnerWarnings:= ,
+	FaultReset:=FaultReset,
+	NumberMessage=>NumberMessage,
+	health=>Health,
+	ShutDown=> ,
+	Alarm=>,
+	Warning=> );
+
+Burner();
+
+IF FaultReset THEN FaultReset:=FALSE; END_IF;
+
+END_IF;
+END_PROGRAM
