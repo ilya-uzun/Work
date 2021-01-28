@@ -4,71 +4,6 @@
 (* @PATH := '\/Drivers' *)
 (* @OBJECTFLAGS := '0, 8' *)
 (* @SYMFILEFLAGS := '2048' *)
-FUNCTION_BLOCK DriverAirValve
-VAR_INPUT
-	FeedBack:INT;
-	FeedBackBeat:INT;
-	SetPoint:INT;
-	Discrepancy:INT;
-	FaultTime:BYTE;
-	Stop:BOOL;
-	Reset:BOOL;
-END_VAR
-
-VAR_IN_OUT
-	Set:INT;
-	SetPointMax:INT;
-	SetPointMin:INT;
-END_VAR
-
-VAR_OUTPUT
-	Done:BOOL;
-	Error:BYTE;
-END_VAR
-VAR
-	FeedBackBeatOld:INT;
-	ton1:INT;
-END_VAR
-(* @END_DECLARATION := '0' *)
-
-IF SetPointMin>=SetPointMax THEN SetPointMax:=SetPointMin +1; END_IF;
-IF SetPoint>SetPointMax THEN SetPoint:=SetPointMax; END_IF;
-IF SetPoint<SetPointMin THEN SetPoint:=SetPointMin; END_IF;
-
-IF (SetPoint-Discrepancy>FeedBack OR SetPoint+Discrepancy<FeedBack) AND FeedBackBeat=FeedBackBeatOld THEN
-	Done:=FALSE;
-	IF ton1<(FaultTime*10) THEN
-		ton1:=ton1+1;
-	ELSE
-		Error.0:=TRUE;
-	END_IF;
-ELSE ton1:=0; Done:=TRUE;
-END_IF;
-(*
-IF FeedBackBeat=FeedBackBeatOld AND FeedBackBeat=-1 THEN
-	Error.1:=TRUE;
- 	ton1:=0;
-END_IF;*)
-
-IF Reset AND Error<>0 THEN Error:=0; ton1:=0; END_IF;
-
-IF FeedBackBeatOld<>FeedBackBeat THEN
-	FeedBackBeatOld:=FeedBackBeat;
-END_IF;
-
-IF NOT Stop AND Error=0 THEN
-	Set:=SetPoint;
-ELSE Done:=FALSE;
-END_IF;
-
-
-END_FUNCTION_BLOCK
-
-
-(* @NESTEDCOMMENTS := 'Yes' *)
-(* @PATH := '\/Drivers' *)
-(* @OBJECTFLAGS := '0, 8' *)
-(* @SYMFILEFLAGS := '2048' *)
 FUNCTION_BLOCK DriverBoiler
 VAR_INPUT
 	StartIn:BOOL;
@@ -1001,32 +936,24 @@ FUNCTION_BLOCK DriverMessage
 
 VAR_INPUT
 	GasRegValveErrors:BYTE;
-	GasRegValveWarnings:BYTE;
 	AirRegValveErrors:BYTE;
-	AirRegValveWarnings:BYTE;
 	GasValveErrors:BYTE;
 	GasValveWarnings:BYTE;
 	FunErrors:BYTE;
 	FunWarnings:BYTE;
 	BurnerErrors:BYTE;
-	BurnerWarnings:BYTE;
 	FaultReset:BOOL;
 END_VAR
 
 VAR_OUTPUT
 	NumberMessage:BYTE;
 	health:BOOL;
-	ShutDown:BOOL;
-	Alarm:BOOL;
-	Warning:BOOL;
 END_VAR
 
 VAR
 	healthOld:BOOL;
 	trgr:BYTE;
-	i: BYTE;
-	j: BYTE;
-	k:BYTE;
+
 END_VAR
 (* @END_DECLARATION := '0' *)
 
@@ -1687,8 +1614,6 @@ VAR_INPUT
 	row2:STRING;
 	row3:STRING;
 	row4:STRING;
-	key_up:BOOL;
-	key_down:BOOL;
 	sp1:INT;
 	sp2:INT;
 	sp3:INT;
@@ -1708,14 +1633,6 @@ VAR
 	j:BYTE;								(*количество переменных (на 1 больше)*)
 	a:ARRAY[1..4] OF INT;
 	str:ARRAY[1..4] OF STRING;
-	tmp1:STRING;
-	tmp2:BYTE;
-	tmp3:BYTE;
-	tmp4:BYTE;
-	ton1: BYTE;
-
-	ton2: BYTE;
-	ton3: BYTE;
 END_VAR
 (* @END_DECLARATION := '0' *)
 IF row1<>row1_old OR row2<>row2_old OR row3<>row3_old OR row4<>row4_old THEN
@@ -1895,36 +1812,6 @@ END_PROGRAM
 (* @PATH := '' *)
 (* @OBJECTFLAGS := '0, 8' *)
 (* @SYMFILEFLAGS := '2048' *)
-PROGRAM CurrentMessageProcedure
-VAR_INPUT
-	Message:STRING;
-END_VAR
-
-VAR_IN_OUT
-	CurrentMessages:ARRAY [1..10] OF STRING;
-	Counter: BYTE;
-END_VAR
-
-VAR
-	i: BYTE;
-	j:BYTE;
-	k:BYTE;
-END_VAR
-(* @END_DECLARATION := '0' *)
-FOR i:=1 TO 9 DO
-	j:=11-i;
-	k:=10-i;
-	CurrentMessages[j]:=CurrentMessages[k];
-END_FOR;
-IF Counter<10 THEN Counter:=Counter+1; END_IF;
-CurrentMessages[1]:=Message;
-END_PROGRAM
-
-
-(* @NESTEDCOMMENTS := 'Yes' *)
-(* @PATH := '' *)
-(* @OBJECTFLAGS := '0, 8' *)
-(* @SYMFILEFLAGS := '2048' *)
 PROGRAM Periphery
 VAR
 	COM_SERVICE1: COM_SERVICE;	   (*ФБ открытия порта*)
@@ -1932,26 +1819,12 @@ VAR
 	Settings:COMSETTINGS;				(* настройки последовательного порта *)
       	com_num: PORTS:=1;				(*0 - RS-485, 1 - RS-232*)
 	send2_modbus: MB_WR_REGS;         (*функция 16 - запись параметров*)
-	get1_modbus: MB_RD_HOLD_REGS;    (*функция 03 - чтение параметра типа INT*)
 	Buffer: ARRAY[0..255] OF BYTE;		(* байтовый буфер данных *)
      	cmpl: BOOL;
-	Init: BOOL;								(* признак инициализации пользовательской программы *)
-	enabl: BOOL;							(*состояние работы блока*)
 	err: INT;								(*номер ошибки*)
 	TimeOut: TIME:=T#100ms;				(*таймаут*)
-	Exception: BYTE;
 	DataSize: WORD;
-	master1: BYTE:= 1;
-	t: DWORD;						(*переменная для организации счетчика*)
-	A: WORD := 0;					(*счетчик*)
-	x:WORD;						(*считанное значение*)
-	x1: WORD;						(*переменная для записи по сети*)
-	x2: WORD;						(*переменная для записи по сети*)
-	x3: WORD;						(*переменная для записи по сети*)
-	d:  REAL;						(*считанное значение*)
-	ptr_D:POINTER TO BYTE;
 	Modbus_prph:INT;
-
 END_VAR
 (* @END_DECLARATION := '0' *)
 (*Устанавливаем настройки COM-порта*)
@@ -2192,21 +2065,15 @@ GasRegulator(
 
 Messages(
 	GasRegValveErrors:=GasRegValveError,
-	GasRegValveWarnings:= ,
 	AirRegValveErrors:=AirValveError,
-	AirRegValveWarnings:= ,
 	GasValveErrors:=GasValveError ,
 	GasValveWarnings:=GasValveWarning,
 	FunErrors:=FunError,
 	FunWarnings:=FunWarning,
 	BurnerErrors:=BurnerErrors,
-	BurnerWarnings:= ,
 	FaultReset:=FaultReset,
 	NumberMessage=>NumberMessage,
-	health=>Health,
-	ShutDown=> ,
-	Alarm=>,
-	Warning=> );
+	health=>Health);
 
 Burner();
 
