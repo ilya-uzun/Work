@@ -1178,16 +1178,7 @@ CASE scrn OF															(*выбор окон*)
 		IF mode=2 AND trgr.0 THEN IF key_up THEN GasRegulatorSetPoint:=GasRegulatorSetPoint+1; ELSIF key_down THEN GasRegulatorSetPoint:=GasRegulatorSetPoint-1; END_IF; END_IF;
 
 
-(*
-		IF ControlMode<>2 THEN
-			tmp3:='Газ=   %Мощ=   %'; tmp4:=GasRegulatorSetPoint;
-		ELSE
-			tmp3:='Газ=   %TEk=   '; tmp4:=REAL_TO_INT(HeatTemperature);
-		END_IF;
-		IF mode<>0 THEN mode:=2; END_IF;
-		Screen(row1:= tmp1 , row2:=tmp3 , row3:='Взд=   %Р=   0Па', row4:=tmp2, sp1:=REAL_TO_INT(GasRegValve.CurrentPosition), sp2:=tmp4, sp3:= REAL_TO_INT(AirValve.CurrentPosition), sp4:=AirPressure/10, mode:=mode);
-		IF mode=2 AND trgr.0 THEN IF key_up THEN GasRegulatorSetPoint:=GasRegulatorSetPoint+1; ELSIF key_down THEN GasRegulatorSetPoint:=GasRegulatorSetPoint-1; END_IF; END_IF;
-	*)(**********Окна общих настроек**********)
+	(**********Окна общих настроек**********)
 	100:
 		CASE ControlMode OF
 			0:
@@ -1209,13 +1200,7 @@ CASE scrn OF															(*выбор окон*)
 				1:	IF key_up THEN AirValveDeadBand:=AirValveDeadBand+1; ELSIF key_down THEN AirValveDeadBand:=AirValveDeadBand-1; END_IF;
 			END_CASE;
 		END_IF;
-		(*Screen(row1:= 'Настройка' , row2:='Заслонка воздуха' , row3:='Разница<=    %' , row4:='ВрОшибки=    с', sp1:=AirValveDiscrepancy, sp2:=AirValveFaultTime, mode:=mode);
-		IF trgr.0 THEN
-			CASE mode OF
-				1:	IF key_up THEN AirValveDiscrepancy:=AirValveDiscrepancy+1; ELSIF key_down THEN AirValveDiscrepancy:=AirValveDiscrepancy-1; END_IF;
-				2:	IF key_up THEN AirValveFaultTime:=AirValveFaultTime+1; ELSIF key_down THEN AirValveFaultTime:=AirValveFaultTime-1; END_IF;
-			END_CASE;
-		END_IF;*)
+
 	102:
 		Screen(row1:= 'Настройка' , row2:='Заслонка воздуха' , row3:='Время хода=   с' , row4:='ВрОшибки =   с', sp1:=AirValveRunningTime, sp2:=AirValveFaultTime, mode:=mode);
 		IF trgr.0 THEN
@@ -1224,13 +1209,6 @@ CASE scrn OF															(*выбор окон*)
 				2:	IF key_up THEN AirValveFaultTime:=AirValveFaultTime+1; ELSIF key_down THEN AirValveFaultTime:=AirValveFaultTime-1; END_IF;
 			END_CASE;
 		END_IF;
-		(*Screen(row1:= 'Настройка' , row2:='Заслонка воздуха' , row3:='Максимум=    %' , row4:='Минимум=    %', sp1:=AirValveSetPointMax, sp2:=AirValveSetPointMin, mode:=mode);
-		IF trgr.0 THEN
-			CASE mode OF
-				1:	IF key_up THEN AirValveSetPointMax:=AirValveSetPointMax+1; ELSIF key_down THEN AirValveSetPointMax:=AirValveSetPointMax-1; END_IF;
-				2:	IF key_up THEN AirValveSetPointMin:=AirValveSetPointMin+1; ELSIF key_down THEN AirValveSetPointMin:=AirValveSetPointMin-1; END_IF;
-			END_CASE;
-		END_IF;*)
 	103:
 		Screen(row1:= 'Настройка' , row2:='Давление воздуха' , row3:='ВВ (ав)=   0 Па' , row4:='В  (пр)=   0 Па', sp1:=FunPressureHH/10, sp2:=FunPressureH/10, mode:=mode);
 		IF trgr.0 THEN
@@ -1444,8 +1422,6 @@ CASE scrn OF															(*выбор окон*)
 			END_CASE;
 		END_IF;
 
-
-
 	(**********Окна сервисного режима**********)
 	160:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Задание мощности' , row4:='Значение=', sp1:= PowerSP, mode:=mode);
@@ -1460,8 +1436,6 @@ CASE scrn OF															(*выбор окон*)
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Текущая мощность' , row4:='Задание=', mode:= mode, sp1:= CurrentPower);
 		IF mode=1 AND trgr.0 THEN IF key_up THEN CurrentPower:=CurrentPower+1; ELSIF key_down THEN CurrentPower:=CurrentPower-1; END_IF; END_IF;
 	165:
-		(*Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='' , row4:='Уст=    Зн=', mode:= mode, sp1:= AirValveSet, sp2:= AirValveFB);
-		IF mode=1 AND trgr.0 THEN IF key_up THEN AirValveSet:=AirValveSet+1; ELSIF key_down THEN AirValveSet:=AirValveSet-1; END_IF;  END_IF;*)
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Заслонка воздуха' , row4:='/-/ R=     Om /+/', mode:= mode, sp1:= AirValveFB);
 		IF mode=1 AND trgr.0 THEN AirRegUp:=key_up; AirRegDown:=key_down; END_IF;
 	166:
@@ -1514,11 +1488,6 @@ CASE scrn OF															(*выбор окон*)
 		IF mode=1 AND trgr.0 THEN IF key_up THEN Valve3:=TRUE; ELSIF key_down THEN Valve3:=FALSE; END_IF; END_IF;
 	183:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ВыборДизТоплива' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(OilMode));
-
-
-
-
-
 END_CASE;
 
 IF trgr.0 AND key_alt AND key_enter THEN GasRegInit:=TRUE; END_IF;
@@ -1577,7 +1546,6 @@ END_IF;
 IF key_enter AND trgr.0 THEN IF mode<4 THEN mode:=mode+1; ELSE mode:=1; END_IF;
 ELSIF key_exit AND trgr.0 THEN mode:=0;
 END_IF;
-
 
 IF key_start AND trgr.0 AND scrn>=100 AND key_alt THEN GasRegValveCalibrateEnable:=TRUE; AirValveCalibrateEnable:=TRUE;
 ELSIF key_start AND trgr.0 AND ControlMode=1 AND NOT startcmnd THEN startcmnd:=TRUE;
@@ -1761,47 +1729,7 @@ Write_Display(SINGLE_MODE, 0, 0, row1);
 Write_Display(SINGLE_MODE, 0, 1, row2);
 Write_Display(SINGLE_MODE, 0, 2, row3);
 Write_Display(SINGLE_MODE, 0, 3, row4);
-(*
-IF LEN(row2)>16 THEN
-	IF LEN(row2)<16+tmp2 THEN
-		IF ton1=0 THEN tmp2:=0; END_IF;
-		ton1:=ton1+1;
-		IF ton1>15 THEN ton1:=1; tmp2:=tmp2+1; END_IF;
-	ELSE tmp2:=0;
-		Write_Display(SINGLE_MODE, 0, 1, LEFT(DELETE(row2, tmp2, 1), 16));
-	END_IF;
-ELSE
-	ton1:=0;
-	Write_Display(SINGLE_MODE, 0, 1, row2);
-END_IF;
 
-IF LEN(row3)>16 THEN
-	IF LEN(row3)<16+tmp3 THEN
-		IF ton2=0 THEN tmp3:=0; END_IF;
-		ton2:=ton2+1;
-		IF ton2>15 THEN ton2:=1; tmp3:=tmp3+1; END_IF;
-	ELSE tmp3:=0;
-		Write_Display(SINGLE_MODE, 0, 2, LEFT(DELETE(row3, tmp3, 1), 16));
-	END_IF;
-ELSE
-	ton2:=0;
-	Write_Display(SINGLE_MODE, 0, 2, row3);
-END_IF;
-
-IF LEN(row4)>16 THEN
-	IF LEN(row4)<16+tmp4 THEN
-		IF ton3=0 THEN tmp4:=0; END_IF;
-		ton3:=ton3+1;
-		IF ton3>15 THEN ton3:=1; tmp4:=tmp4+1; END_IF;
-	ELSE tmp3:=0;
-		Write_Display(SINGLE_MODE, 0, 3, LEFT(DELETE(row4, tmp4, 1), 16));
-	END_IF;
-ELSE
-	ton3:=0;
-	Write_Display(SINGLE_MODE, 0, 3, row4);
-END_IF;
-
-*)
 
 
 
@@ -1872,13 +1800,6 @@ ELSE
 END_IF;
 AirPressure:=REAL_TO_INT (AirPressure_prph*40.0);
 
-
-
-
-
-
-
-
 IF COM_SERVICE1.ready THEN
 	port_opened:=2;
 
@@ -1899,11 +1820,6 @@ IF COM_SERVICE1.ready THEN
 	(*если установлен признак завершения операции, то *)
 END_IF
 IF port_opened<>2 AND port_opened<>0 THEN port_opened:=0; END_IF;
-
-
-
-
-
 END_PROGRAM
 
 
@@ -1988,12 +1904,6 @@ Fun(
 
 GasValve(
 	Mode:=1,
-(*	Pressure:=GasPressure,
-	PressureBeat:=GasPressure_prphBeat,
-	PressureHH:=GasValvePressureHH,
-	PressureH:=GasValvePressureH,
-	PressureL:=GasValvePressureL,
-	PressureLL:=GasValvePressureLL,*)
 	DelayTime:=GasValveDelayTime,
 	IgnitionDelay:=GasValveIgnitionDelay,
 	IgnitionTime:=GasValveIgnitionTime,
@@ -2060,8 +1970,6 @@ GasRegulator(
 	CurrentPoint=>CurrentPower,
 	Changing=>GasRegulatorChanging,
 	Done=>GasRegulatorDone);
-
-
 
 Messages(
 	GasRegValveErrors:=GasRegValveError,
