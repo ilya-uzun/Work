@@ -985,50 +985,6 @@ IF trgr.0 OR FaultReset THEN
 	END_IF;
 END_IF;
 
-
-(*
-
-
-
-
-		CurrentMessageProcedure(
-			Message:='Заслонка Газа Ошибка движения',
-			CurrentMessages:=CurrentMessages,
-			Counter:=CountMessages);
-	END_IF;
-
-	IF GasRegValveErrors.1 THEN
-		CurrentMessageProcedure(
-			Message:='Заслонка Газа Ошибка датчика',
-			CurrentMessages:=CurrentMessages,
-			Counter:=CountMessages);
-	END_IF;
-
-	IF AirRegValveErrors.0 THEN
-		CurrentMessageProcedure(
-			Message:='Заслонка Воздуха Ошибка движения',
-			CurrentMessages:=CurrentMessages,
-			Counter:=CountMessages);
-	END_IF;
-
-	IF AirRegValveErrors.1 THEN
-		CurrentMessageProcedure(
-			Message:='Заслонка Воздуха Ошибка датчика',
-			CurrentMessages:=CurrentMessages,
-			Counter:=CountMessages);
-	END_IF;
-
-END_IF;
-
-IF Health AND NOT trgr.1 THEN
-	trgr.1:=TRUE;
-	FOR i:=1 TO 10 DO
-		CurrentMessages[i]:='';
-	END_FOR;
-ELSIF NOT Health THEN trgr.1:=FALSE;
-END_IF;*)
-
-
 END_FUNCTION_BLOCK
 
 
@@ -1427,8 +1383,8 @@ CASE scrn OF															(*выбор окон*)
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Задание мощности' , row4:='Значение=', sp1:= PowerSP, mode:=mode);
 	161:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Давление воздуха' , row4:='Знач=    0 Па', sp1:= AirPressure/10, mode:=mode);
-	162:
-		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Реле газа вход' , row4:='Знач=', sp1:=BOOL_TO_INT(GasIncomingPressureMax), mode:=mode);
+	162: (*???*)
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Реле газа вход' , row4:='Знач=', sp1:=    , mode:=mode);
 	163:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Трансформатор' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Trans));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN Trans:=TRUE; ELSIF key_down THEN Trans:=FALSE; END_IF; END_IF;
@@ -1469,8 +1425,8 @@ CASE scrn OF															(*выбор окон*)
 	176:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Кл-н запальника' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValveIgnition));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValveIgnition:=TRUE; ELSIF key_down THEN GasValveIgnition:=FALSE; END_IF; END_IF;
-	177:
-		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Реле герм-ности' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(GasSafetyPressureMax));
+	177:(*???*)
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Реле герм-ности' , row4:='Состояние=', mode:= mode, sp1:=  );
 	178:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Кл-н безоп-ти' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValveSafety));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValveSafety:=TRUE; ELSIF key_down THEN GasValveSafety:=FALSE; END_IF; END_IF;
@@ -1791,7 +1747,7 @@ Modbus_prph.10:=Valve1;(*ст1*)
 LimitSwitch:=LimitSwitch_prph;
 Start:=Start_prph;
 AirValveFB:=REAL_TO_INT (AirValveFB_prph);
-GasRegValveFB:=REAL_TO_INT (GasRegValveFB_prph);
+
 IF ControlMode<>2 THEN
 	PowerSP:=REAL_TO_INT (PowerSP_prph);
 	HeatTemperature:=HeatTemperatureSP;
