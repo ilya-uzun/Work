@@ -1997,6 +1997,10 @@ PROGRAM PLC_PRG
 VAR
 	tmp1:BYTE;
 END_VAR
+(* DI
+ GasIncomingPressureMax %ix0.0.0.2
+GasSafetyPressureMax  %ix0.0.0.3
+*)
 (* @END_DECLARATION := '0' *)
 IF tmp1<50 THEN
 	tmp1:=tmp1+1;
