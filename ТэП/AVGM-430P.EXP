@@ -5,7 +5,7 @@
 (* @OBJECTFLAGS := '0, 8' *)
 (* @SYMFILEFLAGS := '2048' *)
 (* если на обоих входих истина, запускается таймер и по истечении
- указаного времяни присваивает зничение на Out=true .
+ указаного времяни присваивает зничение на Out=true на оба выхода.
 AlarmAND_FB_Res сбросит Out на false на оба выхода если первое условие and не выполняется*)
 FUNCTION_BLOCK AlarmAND_FB
 VAR_INPUT
@@ -260,7 +260,7 @@ END_FUNCTION_BLOCK
 (* @SYMFILEFLAGS := '2048' *)
 FUNCTION_BLOCK Heating_FB
 VAR_INPUT
-	byMode_FB : BYTE;
+	bMode_FB : BOOL;
 
 	wTempCO : REAL;
 	wYstPanel : WORD;
@@ -274,34 +274,36 @@ VAR_OUTPUT
 	bVolveAirEneble :BOOL;
 END_VAR
 VAR
-	wYstavkaCO :WORD;
 	bVolve : BOOL;
 END_VAR
 (* @END_DECLARATION := '0' *)
 
 IF wYstPanel = 0
-THEN wYstavkaCO := 25; (*уставка темп в СО по умолчанию*)
+THEN wYstavkaCO := 24; (*уставка темп в СО по умолчанию*)
 ELSE wYstavkaCO:= wYstPanel;
 END_IF
-
-	 IF  bErrorHeating OR bVolve
+(*Управление  EK*)
+	 IF  bErrorHeating OR NOT SB1_PressKeyErrorStop
 	THEN bHeatingOff := TRUE; bHeatingEneble:= FALSE;
-	ELSIF   wTempCO < wYstavkaCO - 1  AND byMode_FB = 0
-	THEN bHeatingEneble := TRUE; bHeatingOff := FALSE; bVolveAirEneble := FALSE;
+	ELSIF   wTempCO < wYstavkaCO - 1
+	THEN bHeatingEneble := TRUE; bHeatingOff := FALSE;
 	ELSIF wTempCO > wYstavkaCO + 1
 	THEN bHeatingEneble:= FALSE; bHeatingOff := TRUE;
 	END_IF
 
-IF  byMode_FB = 1 OR byMode_FB = 2 OR byMode_FB = 3
+IF  bMode_FB
 THEN bVolve := TRUE;
 ELSE bVolve := FALSE;
 END_IF
 
-	IF wTempCO < wYstavkaCO -1 AND NOT bErrorVolveAir AND bVolve
-	THEN bVolveAirEneble := TRUE; bHeatingEneble := FALSE; bHeatingOff := TRUE;
-	ELSIF   wTempCO > wYstavkaCO + 1 AND NOT bErrorVolveAir
-	THEN bVolveAirEneble:= FALSE;
+	IF BK2_tempAir > wYstavkaCO AND wTempCO < wYstavkaCO -1 AND NOT bErrorVolveAir AND bVolve
+	THEN
+		bVolveAirEneble := TRUE;
+	ELSE
+		bVolveAirEneble:= FALSE;
 	END_IF
+
+
 
 END_FUNCTION_BLOCK
 
@@ -315,7 +317,7 @@ VAR_INPUT
 	bSignalSAY : BOOL; (*сигналы на смену режима*)
 	bSignalDiscret : BOOL;
 
-	bWork1 : BOOL; (*работать по выходу*)
+	bWork1 : BOOL:= TRUE; (*работать по выходу*)
 	bWork2 : BOOL; (*работать по темп в помещении*)
 	reTempRoom : REAL;
 	reTempExit : REAL;
@@ -371,9 +373,9 @@ END_IF
 
 (*задание температуры на ПИД*)
 IF bWork1
-THEN  wZadaniePID_FB:= wPanelZad1;
+THEN wZadaniePID_FB:= wPanelZad1;
 ELSIF bWork2
-THEN   wZadaniePID_FB:=  wPanelZad2;
+THEN wZadaniePID_FB:=  wPanelZad2;
 ELSE wZadaniePID_FB:= wZad; wZadaniePID_FB:=  wZad; (*присвоить врутренее задание*)
 END_IF
 
@@ -423,163 +425,454 @@ END_FUNCTION_BLOCK
 (* @PATH := '\/FB' *)
 (* @OBJECTFLAGS := '0, 8' *)
 (* @SYMFILEFLAGS := '2048' *)
+(* ПИ-регулятор для управления ИМ2Х0 с двуя командами без сигнала положения(Горелка).
+Данный ШИМ-алгоритм орентирован на установление  рассчитанного ПИД-ом (равновесного) положения горелки.
+Формула ПИД – приведена к виду с понятным определением коэф-ов, по известной Т1- постоянной времени объекта управления, определяемой по переходной хар-ки.
+После выхода из зоны нечуств., П импульс подаётся один раз. (Фактически определяя положение горелки, которое И-составляющая со временем корректирует)
+Затем импульсы с периодом "Time_PWM" формирует только И-составляющая. (См. приложенную Временную диаграмму.)
+Кп = К * Т1(=КP*TN), Ки = К (=KP), Кд = 0(=К*Т1*Т2)
+Задаются пользователем :	Т1 - постоянная времени объекта, К - коэф пропорц. 
+
+FB реализует периодическое, с заданным периодом "Time_PWM", формирование команд управления БОЛЬШЕ и МЕНЬШЕ.
+Длительности управляющего воздействия/импульса (выхода регулятора)  расчитывается  ПИ-алгоритмом.  
+ПИД-алгоритм реализован путём замены операторов диф-я и интегрирования в классическом уравнении ПИД-регулятора 
+конечными разностями и конечными суммами :  
+ 	Y:=Y_OFFSET+ КК * KP * TN * ERROR + I.OUT + D.OUT * TV * ERROR / ABS(ERROR)  + Y_ADDOFFSET. 
+	КК - исп. для исключения П-составляющей, после выдачи первого управляющего импульса	после выхода из зоны нечуств-ти.
+ПИД-алгоритм работает при условии Кп <>0 И Ки >0.
+*)
+(*------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*)
+FUNCTION_BLOCK PID_PWM_ASUPRO
+VAR_INPUT
+	ACTUAL :REAL;				(* Регулируемый параметр		actual value, process variable *)
+	SET_POINT:REAL;			(*ЗДН			 desired value, set point *)
+	KP:REAL;						(*К-коэффициент  =0.01*)
+	TN:REAL;						(*Т1- постоянная времени объекта, с  *)
+	TV:REAL;						(*Т2-коэффициент	rate time, derivative time (D) in sec*)
+	D_ZONE: REAL;				(*Зона нечувствительности*)
+	AVT_REG: BOOL;				(* АВТ/ДУ (True)*)
+	kn_RUCH_Y_UP: BOOL;		(*Вход "ОТКРЫТЬ" при ДУ управлении*)
+	kn_RUCH_Y_DOWN: BOOL;		(*Вход "ЗАКРЫТЬ" при ДУ останове*)
+	Time_PWM :INT; 			(*Период ШИМ, измеряется в циклах программы  100*0,3c = 30 c*)
+END_VAR
+VAR
+	LIMITS_ACTIVE:BOOL:=FALSE;	(* Флаг при достижении Y заданных границ					true set value would exceed limits Y_MIN, Y_MAX *)
+	OVERFLOW:BOOL:=FALSE;		(* Флаг переполнения Интегратора			overflow in integral part *)
+END_VAR
+VAR
+	CLOCK:TON;					(*таймер исп-ся для определения времени цикла вызова ПИД - dt*)
+	I: INTEGRAL;					(*Интегратор*)
+	D: DERIVATIVE;				(**)
+	TMDIFF: DWORD;				(*dt - время цикла вызова регулятора исп-ся  для диф-ния, мс *)
+	ERROR: REAL;				(**)(*внутренний Ошибка*)
+	INIT: BOOL:=TRUE;			(*Флаг первичной инициализации, при старте*)
+	Y_ADDOFFSET: REAL;		(*величина Добавочного смещение для Y*)
+	KPcopy:REAL;					(*внутренний Кп*)
+	TNcopy:REAL;					(*внутренний Ки*)
+	TVcopy:REAL;					(*внутренний Кд*)
+	ERROR_RASCH: REAL;		(*внутренний Ошибка*)
+	Y	:	REAL;					(*Выход ПИД = Рассчитываемое алгоритмом Управляющее воздействие , -100...+100*)
+	Tof_UP: TOF;					(**)
+	Tof_DOWN: TOF;				(**)
+	RESET:BOOL;					(* команда сброса Y в Y_OFFSET и сброс интегральной составляющей 		reset: set Y output to Y_OFFSET and reset integral part *)
+	Y_MANUAL:REAL;				(*Если режим ДУ, то Y = этому значению   			Y is set to this value as long as MANUAL=TRUE *)
+	Y_OFFSET: REAL := 0;		(* Смещение для управляющей	переменной		offset for manipulated variable*)
+	Y_MIN: REAL := -100;			(* Граница Мин. Y			minimum value for manipulated variable*)
+	Y_MAX: REAL := 100;			(* Граница Макс.Y		maximum value for manipulated variable*)
+	MANUAL:BOOL;				(* 	TRUE: manual: Y is not influenced by controller,		FALSE: controller determines Y *)
+	KK: REAL := 1;					(*гаа : Флаг разрешения  П-составляющей*)
+END_VAR
+
+VAR_OUTPUT
+	Y_UP:BOOL; 				(*Управляющий выход на ИМ - БОЛЬШЕ*)
+	Y_DOWN: BOOL;			(*Управляющий выход на ИМ - МЕНЬШЕ*)
+	D_ZONE_: BOOL;			(*Зона нечувствительности*)
+END_VAR
+
+VAR
+	T_PWM: REAL;		(*Длительность  управляющей команды, расчитанное ПИД*)
+	Counter: INT;			(*Счетчик, необходим для счета времени ШИМа*)
+	Sbros: BOOL;			(*внутренняя команда сброса, при входе в зону нечуств-ти*)
+END_VAR
+(* @END_DECLARATION := '0' *)
+(*Определение величины Ошибки*)
+IF (SET_POINT - D_ZONE) <= ACTUAL AND (SET_POINT+D_ZONE >= ACTUAL)
+THEN ERROR_RASCH:=0; KK:= 1; D_ZONE_:= TRUE; (*гаа : Разрешение П-составляющей*)
+           ELSIF (SET_POINT- D_ZONE) > ACTUAL
+            THEN ERROR_RASCH := SET_POINT - ACTUAL - D_ZONE; D_ZONE_:= FALSE;
+                        ELSIF (SET_POINT+D_ZONE) < ACTUAL
+                        THEN ERROR_RASCH := SET_POINT - ACTUAL + D_ZONE; D_ZONE_:= FALSE;
+END_IF
+
+(*Сброс Интегратора если Ошибка = 0 (если регулируемый параметр в зоне нечуств-ти) *)
+IF Sbros=1 THEN RESET:=1; ELSE RESET:=0;  END_IF
+(*=====ПИД-алгоритм================================================================================================*)
+IF TN > 0 AND KP <> 0 THEN
+	ERROR := ERROR_RASCH;								(* Regeldifferenz *)
+
+	IF OVERFLOW OR RESET OR MANUAL OR INIT OR (KP<>KPcopy OR TN<>TNcopy OR TV<>TVcopy) THEN		(* Reset ИЛИ ДУ (Handbetrieb)  ИЛИ Инициализация ИЛИ изменились коэф-ы ПИД-а*)
+		I(RESET:=TRUE);		(*Сброс интегратора*)
+		D(RESET:=TRUE);
+		OVERFLOW:=FALSE;
+		LIMITS_ACTIVE:=FALSE;
+		IF RESET OR INIT THEN 		 (* Reset ИЛИ Инициализация*)
+			Y := Y_OFFSET;			(*Сброс Y*)
+			INIT:=FALSE;				(*Сброс флага Инициализации*)
+			Y_ADDOFFSET := 0;
+		ELSIF MANUAL THEN		(*если режим ДУ*)
+			Y := Y_MANUAL;
+			Y_ADDOFFSET := Y_MANUAL-(Y_OFFSET+ KP * TN* ERROR + I.OUT + D.OUT*TV);  (*смещени = ЗДН ДУ - *)
+		ELSE
+			Y_ADDOFFSET := Y - Y_OFFSET - KP * TN * ERROR;		(*смещение  = *)
+		END_IF
+		TMDIFF:=0;
+		CLOCK(IN:=FALSE);									(* Timer neu starten *)
+		CLOCK(PT:=t#1h, IN:=TRUE);						(*Запуск 1 ч таймера, исп. для определения времени цикла TMDIFF *)
+		(*Копирование коэф-ов ПИД во внутренние переменные, чтобы затем определять момент их изменения*)
+		TNcopy := TN;
+		TVcopy := TV;
+		KPcopy := KP;
+	ELSE
+		CLOCK;												(* Работа таймера			Timer abfragen *)
+		TMDIFF:=TIME_TO_DWORD(CLOCK.ET);			(*Определение времени цикла					Zeitdifferenz seit letztem Aufruf *)
+	END_IF;
+    (*-------Расчёт ПИД в каждый dt -отсчёт времени ------------------------------------------------------------*)
+	IF TMDIFF > 0 THEN
+		CLOCK(IN:=FALSE);									(* Timer neu starten *)
+		CLOCK(PT:=t#1h, IN:=TRUE);						(*Запуск 1 ч таймера, исп. для определения времени цикла TMDIFF *)
+
+		D(IN:=ERROR, TM:=TMDIFF, RESET:=FALSE);				(* Определение Диф. составляющей			Differential abschдtzen *)
+		I(IN:=ERROR*KP, TM:=TMDIFF, RESET:=FALSE);				(* Определение Интегр. составляющей 		Integral abschдtzen *)    (*гаа : добавил, как у СС, K в интегратор*)
+
+		OVERFLOW := I.OVERFLOW;
+		IF NOT OVERFLOW THEN		(*Если нет переполнения Интегратора *)
+			Y:=Y_OFFSET+ KK * KP * TN * ERROR + I.OUT + D.OUT * TV * ERROR / ABS(ERROR)  + Y_ADDOFFSET;  (*****Формула ПИД !********гаа : Д составляющая c учётом знака Ошибки*)
+			IF Y>1E30 OR Y<-1E30 THEN						(* Обработка возможного переполнения 		Overflow steht bevor, darf aber eigentlich nicht passieren *)
+				OVERFLOW:=TRUE;
+			END_IF;
+
+			LIMITS_ACTIVE:=FALSE;
+			IF Y_MAX>Y_MIN AND Y>Y_MAX  THEN				(* Проверка превышения Макс. границ 	Stellwert-Obergrenze ьberschritten *)
+				LIMITS_ACTIVE:=TRUE;
+				IF KP<>0 THEN		(*Если Кп не 0, то корректировка Интегральной составляющей*)
+					I(IN:=(Y_MAX-Y)*TN/KP,TM:=1000,RESET:=FALSE);		(* Integral korrigieren *) (**)
+				END_IF
+				Y:=Y_MAX;	(*Ограничиваем Y значением Y_MAX*)
+			END_IF;
+			IF Y_MAX>Y_MIN AND Y<Y_MIN THEN					(* Проверка превышения Мин. границы	Stellwert-Untergrenze unterschritten *)
+				LIMITS_ACTIVE:=TRUE;
+				IF KP<>0 THEN
+					I(IN:=(Y_MIN-Y)*TN/KP,TM:=1000,RESET:=FALSE);		(* Integral korrigieren *)
+				END_IF
+				Y:=Y_MIN; 	(*Ограничиваем Y значением Y_MAX*)
+			END_IF;
+		END_IF;
+	ELSE
+		CLOCK(PT:=t#1h,IN:=TRUE);
+	END_IF;
+	(*----------------------------------------------------------------------------------------------------------------------*)
+END_IF;
+(*=========================================================================================================================*)
+(**************Формирование ШИМ************************************)
+IF ERROR_RASCH=0 THEN Sbros:=1;Counter:=0; ELSE Sbros:=0; Counter:=Counter+1;  END_IF;  (*Если вошли в зону  нечуств., то СБРОС*)
+IF Counter > Time_PWM THEN Counter:=0; (*Sbros:=1; ELSE Sbros:=0;*) END_IF;
+
+T_PWM:=INT_TO_REAL(Time_PWM)*(Y/100);		(*Приведение расчитанного Y к длительности в циклах программы(вызова ПИД)*)
+(*------------------------------------------------------------------------------*)
+(*Управление на закрыие*)
+IF (Counter<T_PWM*-1 AND ERROR_RASCH<>0 AND AVT_REG=1 AND Y_UP=0 AND Tof_UP.Q=0)OR
+   (AVT_REG=0 AND Y_UP=0 AND kn_RUCH_Y_DOWN=1 AND kn_RUCH_Y_UP=0)
+		THEN Y_DOWN:=TRUE;
+			ELSIF (Counter>T_PWM OR ERROR_RASCH=0)  THEN Y_DOWN:=FALSE;
+ELSE Y_DOWN:=FALSE;
+END_IF;
+Tof_DOWN(IN:=Y_DOWN , PT:=(*T#0.2S*) , Q=> , ET=> );
+
+(*Управление на открытие*)
+IF (Counter<T_PWM AND ERROR_RASCH<>0 AND AVT_REG=1 AND Y_DOWN=0 AND Tof_DOWN.Q=0) OR
+    (AVT_REG=0 AND Y_DOWN=0 AND kn_RUCH_Y_UP=1 AND kn_RUCH_Y_DOWN=0)
+		THEN Y_UP:=TRUE;
+			ELSIF Counter>T_PWM OR ERROR_RASCH=0 THEN Y_UP:=FALSE;
+ELSE Y_UP:=FALSE;
+END_IF;
+
+Tof_UP(IN:=Y_UP , PT:=T#0.2S , Q=> , ET=> );  (*Таймер введён для задержки исключающей одновременную подачу Y_UP и Y_DOWN ?*)
+(*------------------------------------------------------------------------------*)
+IF Counter > ABS(T_PWM) AND TMDIFF > 0 THEN KK := 0; END_IF;  (*гаа : Сброс П-составляющей после первого импульса после выхода из зоны нечуств-и*)
+
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/FB' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
 FUNCTION_BLOCK SwBurner_FB
 VAR_INPUT
 	bInput1 : BOOL;
 	bInput2 : BOOL;
-	rZad1 : REAL;
-	rZad2 : REAL;
-	Y_UP : BOOL;
-	Y_DOWN : BOOL;
+	rZad1 : REAL;  		(*гаа : расчитанная мощность Г1, %*)
+	rZad2 : REAL;		(*гаа : расчитанная мощность Г2, %*)
+	Y_UP : BOOL; 		(*гаа : Команда БОЛЬШЕ от ПИД *)
+	Y_DOWN : BOOL; 		(*гаа : Команда МЕНЬШЕ от ПИД *)
+	bInWork1 : BOOL;
+	bInWork2 : BOOL;
 	bInError1 : BOOL;
 	bInError2 : BOOL;
+	wHourBurner1 : WORD;
+	wHourBurner2 : WORD;
 	rTempTO1 : REAL;
 	rTempTO2 : REAL;
+	bD_Zone: BOOL; (*ПИД в зоне нечувствительности*)
 END_VAR
 VAR_OUTPUT
-	rNod1 : REAL;
-	rNod2 : REAL;
-	bPIDmax1 : BOOL;
-	bPIDmin1 : BOOL;
-	bPIDmax2 : BOOL;
-	bPIDmin2: BOOL;
+	bPIDmax1 : BOOL;  (*гаа - команда формировать импульсы на БОЛЬШЕ мощность Г1(3)*)
+	bPIDmin1 : BOOL; (*гаа - команда формировать импульсы на МЕНЬШЕ мощность Г1(3)*)
+	bPIDmax2 : BOOL; (*гаа - команда формировать импульсы на БОЛЬШЕ мощность Г2(4)*)
+	bPIDmin2: BOOL; (*гаа - команда формировать импульсы на МЕНЬШЕ мощность Г2(4)*)
 	bStartPower1 : BOOL;
 	bStartPower2 : BOOL;
-
 END_VAR
 VAR
 	bMode : BYTE;
 	bModeBurner : BYTE;
 	tonIN1 : TON;
 	tonIN2 : TON;
+	tofIN1 : TON;
+	tofIN2 : TON;
 	R_TRIG1 : R_TRIG;
 	R_TRIG2 : R_TRIG;
 	bResetBurner : BOOL;
 	TP1: TP;
+	TON_OnRez1: TON;
+	TON_OnRez2: TON;
+	TON_OffRez1: TON;
+	TON_OffRez2: TON;
+	TP_BurnerDec: TP;
+
 END_VAR
 (* @END_DECLARATION := '0' *)
 (*сброс на модули задания мощности*)
 R_TRIG1(CLK:= bInput1 , Q=> );
 R_TRIG2(CLK:= bInput2 , Q=> );
 
-IF R_TRIG1.Q OR R_TRIG2.Q
-THEN TP1.IN := TRUE;
+IF R_TRIG1.Q OR R_TRIG2.Q THEN
+	TP1.IN := TRUE;
+ELSE
+	TP1.IN := FALSE;
+END_IF
 
-ELSE TP1.IN := FALSE;
-END_IF
-TP1( PT:= t#5s , Q=> , ET=> );
-(*Пуск горелок *)
-IF   bInput1 OR bInput2
-THEN
-(*сброс*)
-IF TP1.Q
-THEN bModeBurner := 0;
-END_IF
-	IF bInput1 AND  (rTempTO1 < 40)   AND NOT  TP1.Q AND NOT bInError1  (*гор 1*)
-	THEN bModeBurner := 1;
-	ELSIF bInput1 AND (rTempTO1 > 40)  AND NOT  TP1.Q AND NOT bInError1  (*разрешение на запуск второй горелки*)
-	THEN bModeBurner := 4 ;
-	END_IF
-		IF bInput2 AND  (rTempTO2 < 40) AND NOT  TP1.Q AND NOT bInError2  (*гор 2*)
-		THEN bModeBurner := 2;
-		ELSIF bInput2 AND (rTempTO2 > 40) AND NOT  TP1.Q AND NOT bInError2
-		THEN bModeBurner := 4 ;
+TP1( PT:= t#5s , Q=> , ET=> );  (*гаа : задержка 5с на включение горелки*)
+(*------------------------------------------Пуск горелок------------------------------ *)
+IF bInput1 OR bInput2
+	THEN
+	(*сброс*)
+	IF TP1.Q THEN
+		bModeBurner := 0;
+	ELSE (*проверка горелок готовых к запуску по выбору с панели*)
+		IF bInput1 AND NOT bInError1 AND bModeBurner=0
+			THEN bModeBurner:= 1;
+		ELSIF bInput1 AND bInError1
+				THEN bModeBurner:= 2;
 		END_IF
-			IF bInput1 AND NOT bInError1 AND  bInput2 AND NOT bInError2 (*запуск двух горелок*)
-			THEN bModeBurner := 3 ;
-			END_IF
+		IF bInput2 AND NOT bInError2 AND bModeBurner=0
+			THEN bModeBurner:= 2;
+		ELSIF bInput2 AND bInError2
+				THEN bModeBurner:= 1;
+		END_IF
+		(*При разрешении двух горелок выбираем основную по наработке *)
+		IF (bInput1 AND bInput2 AND NOT bInError1 AND NOT bInError2 AND wHourBurner1 <= wHourBurner2 AND bModeBurner<=2) OR
+		  	(bModeBurner=5 AND TON_OffRez2.Q) (* Останов резервной горелки при её мин мощности в течении 60 сек*)
+			THEN bModeBurner:= 3;
+		END_IF
+		IF (bInput1 AND bInput2 AND NOT bInError2 AND NOT bInError1 AND wHourBurner2 < wHourBurner1 AND bModeBurner<=2) OR
+			(bModeBurner=6 AND TON_OffRez1.Q) (* Останов резервной горелки при её мин мощности в течении 60 сек*)
+			THEN bModeBurner:= 4;
+		END_IF  (* Запуск резервной горелки при макс мощности основной в течении 60 сек*)
+		IF bInput1 AND NOT bInError1 AND bInput2 AND NOT bInError2 AND bModeBurner=3 AND TON_OnRez2.Q
+			THEN bModeBurner:= 5;
+		END_IF  (* Запуск резервной горелки при макс мощности основной в течении 60 сек*)
+		IF bInput1 AND NOT bInError1 AND bInput2 AND NOT bInError2 AND bModeBurner=4 AND TON_OnRez1.Q
+			THEN bModeBurner:= 6;
+		END_IF
+	END_IF
+ELSE  bModeBurner:= 0;
+END_IF
 
-ELSE  bModeBurner := 0 ;
+IF bModeBurner=3 THEN
+	TON_OffRez2(IN:= FALSE);
+	TON_OnRez2(IN:= (tofIN2.Q AND NOT bD_Zone AND rZad1=100), PT:= T#60S); (*Горелка 1 на макс.мощности*)
+ELSIF
+	bModeBurner=4 THEN
+	TON_OffRez1(IN:= FALSE);
+	TON_OnRez1(IN:= (tofIN1.Q AND NOT bD_Zone AND rZad2=100), PT:= T#60S); (*Горелка 2 на макс.мощности*)
+ELSIF
+	bModeBurner=5 THEN
+	TON_OnRez2(IN:= FALSE);
+	TON_OffRez2(IN:= (tonIN2.Q AND NOT bD_Zone AND rZad2=0), PT:= T#60S); (*Горелка 2 на мин.мощности*)
+ELSIF
+	bModeBurner=6 THEN
+	TON_OnRez1(IN:= FALSE);
+	TON_OffRez1(IN:= (tonIN1.Q AND NOT bD_Zone AND rZad1=0), PT:= T#60S); (*Горелка 1 на мин.мощности*)
+ELSE
+	TON_OnRez1(IN:= FALSE);
+	TON_OnRez2(IN:= FALSE);
+	TON_OffRez1(IN:= FALSE);
+	TON_OffRez2(IN:= FALSE);
 END_IF
 
 CASE bModeBurner OF
 0 : bStartPower1 := FALSE; bStartPower2 := FALSE;
-1 : bStartPower1 := TRUE; bStartPower2 := FALSE;
-2 : bStartPower2 := TRUE; bStartPower1 := FALSE;
-3 : bStartPower1 := TRUE; bStartPower2 := TRUE;
-4 :  bStartPower1 := TRUE;  bStartPower2 := TRUE;
+1 : bStartPower1 := TRUE;  bStartPower2 := FALSE;
+2 : bStartPower1 := FALSE; bStartPower2 := TRUE;
+3 : bStartPower1 := TRUE;  bStartPower2 := FALSE;
+4 : bStartPower1 := FALSE; bStartPower2 := TRUE;
+5 : bStartPower1 := TRUE;  bStartPower2 := TRUE;
+6 : bStartPower1 := TRUE;  bStartPower2 := TRUE;
 END_CASE
 
-
-(*задание на горелку 1*)
-tonIN1(IN:= bStartPower1, PT:= t#60s); (*выдержка для запуска горелки в работу*)
-IF bStartPower1 AND tonIN1.Q AND (rTempTO1 > 40) AND NOT  TP1.Q
-THEN
-	IF Y_UP AND NOT Y_DOWN
-	THEN bMode :=1; (*увеличение мощ гор1*)
-	END_IF
-		IF Y_UP AND (rZad1=100)
-		THEN bMode :=2; (*запуск гор1 и 2*)
+(*-------------------------------------------Управление мощностью горелок -------------------------------------------------*)
+(* Выдержать паузу после вкл/откл горелки для стабилизации и избежания перерегулирования Т, далее управляем мощностью *)
+tonIN1(IN:= bInWork1, PT:= T#3M);
+tonIN2(IN:= bInWork2, PT:= T#3M);
+tofIN1(IN:= NOT bInWork1, PT:= T#3M);
+tofIN2(IN:= NOT bInWork2, PT:= T#3M);
+IF NOT TP1.Q THEN
+	IF (bModeBurner=1 OR bModeBurner=3) AND NOT PLC_PRG.Alarm.bErr70TempAir (*в работе только горелка 1*)
+		THEN
+		IF  Y_UP AND NOT Y_DOWN AND (rZad1<>100) AND tonIN1.Q
+			THEN bMode :=1; (*команда БОЛЬШЕ мощ Г 1 *)
 		END_IF
-			IF Y_DOWN AND  (rZad1=100)
-			THEN bMode :=3; (*в работе 1 и 2 горелка уменьшение мощ гор 2*)
+		IF  Y_DOWN AND NOT Y_UP AND (rZad1<>0) AND tofIN2.Q
+			THEN bMode :=2; (* команда МЕНЬШЕ мощ Г 1*)
+		END_IF
+		IF NOT Y_UP AND NOT Y_DOWN (*если нет команд от ПИД то снять команды*)
+			THEN bMode :=0;
+		END_IF
+	ELSIF (bModeBurner=2 OR bModeBurner=4) AND NOT PLC_PRG.Alarm.bErr70TempAir(*в работе только горелка 2*)
+		THEN
+		IF  Y_UP AND NOT Y_DOWN  AND (rZad2<>100) AND tonIN2.Q
+			THEN bMode :=3; (*команда БОЛЬШЕ мощ Г 2 *)
+		END_IF
+		IF  Y_DOWN AND NOT Y_UP  AND (rZad2<>0) AND tofIN1.Q
+			THEN bMode :=4; (* команда МЕНЬШЕ мощ Г 2*)
+		END_IF
+		IF NOT Y_UP AND NOT Y_DOWN (*если нет команд от ПИД то снять команды*)
+			THEN bMode :=0;
+		END_IF
+	ELSIF bModeBurner=5  (*в работе основная горелка 1 и резервная горелка 2*)
+		THEN
+		(*Делим мощности горелок между собой для избежания перерегулирования Т и переключений при запуске рез.горелки*)
+		IF	(rZad1>80) THEN
+			TP_BurnerDec(IN := TRUE, PT := UINT_TO_TIME(uiBurner1_Tmax));
+			IF TP_BurnerDec.Q THEN
+				bMode:=2;
+			ELSE
+				bMode:=0;
+				TP_BurnerDec(IN := FALSE, PT := UINT_TO_TIME(uiBurner1_Tmax));
 			END_IF
-				IF  Y_DOWN AND (rZad2=0)
-				THEN bMode :=4; (*останов горелки 2 и уменьшение мощ гор 1*)
-				END_IF
-	IF bInError2 AND Y_UP  (*аварийный режим *)
-	THEN bMode := 9;
-	END_IF
-		IF bInError2 AND Y_DOWN
-		THEN bMode := 10;
+		ELSE
+			bMode:=0;
+			TP_BurnerDec.IN := FALSE;
 		END_IF
-IF PLC_PRG.Alarm.bErr70TempAir
-THEN bMode := 13;
-END_IF
-ELSE bMode := 0;
-END_IF
-
-tonIN2(IN:= bStartPower2, PT:= t#60s);
-(*задание на горелку 2*)
-IF bStartPower2 AND tonIN2.Q AND (rTempTO2 > 40) AND NOT  TP1.Q
-THEN
-	IF Y_UP AND NOT Y_DOWN
-	THEN bMode :=5;
-	END_IF
-		IF Y_UP AND (rZad2=100)
-		THEN bMode :=6;
+		(*Управление мощностью резервной горелки 2*)
+		IF  Y_UP AND NOT Y_DOWN AND (rZad2<>100) AND tonIN2.Q
+			THEN bMode :=3; (*команда БОЛЬШЕ мощ Г 2 *)
 		END_IF
-			IF Y_DOWN AND  (rZad2=100)
-			THEN bMode :=7;
+		IF  Y_DOWN AND NOT Y_UP AND (rZad2<>0)
+			THEN bMode :=4; (* команда МЕНЬШЕ мощ Г 2*)
+		END_IF
+		IF NOT Y_UP AND NOT Y_DOWN (*если нет команд от ПИД то не подавать команды*)
+			THEN bMode :=0;
+		END_IF
+	ELSIF bModeBurner=6 (*в работе основная горелка 2 и резервная горелка 1*)
+		THEN
+		(*Делим мощности горелок между собой для избежания перерегулирования Т и переключений при запуске рез.горелки*)
+		IF	(rZad2>80) THEN
+			TP_BurnerDec(IN := TRUE, PT := UINT_TO_TIME(uiBurner2_Tmax));
+			IF TP_BurnerDec.Q THEN
+				bMode:=4;
+			ELSE
+				bMode:=0;
+				TP_BurnerDec(IN := FALSE, PT := UINT_TO_TIME(uiBurner2_Tmax));
 			END_IF
-				IF  Y_DOWN AND (rZad1=0)
-				THEN bMode :=8;
-				END_IF
-	IF bInError1 AND Y_UP (*аварийный режим *)
-	THEN bMode := 11;
-	END_IF
-		IF bInError1 AND Y_DOWN
-		THEN bMode := 12;
+		ELSE
+			bMode:=0;
+			TP_BurnerDec.IN := FALSE;
 		END_IF
-IF PLC_PRG.Alarm.bErr70TempAir
-THEN bMode := 13;
-END_IF
-ELSE bMode := 0;
+		(*Управление мощностью резервной горелки 1*)
+		IF  Y_UP AND NOT Y_DOWN AND (rZad1<>100) AND tonIN1.Q
+			THEN bMode :=1; (*команда БОЛЬШЕ мощ Г 1 *)
+		END_IF
+		IF  Y_DOWN AND NOT Y_UP AND (rZad1<>0)
+			THEN bMode :=2; (* команда МЕНЬШЕ мощ Г 1*)
+		END_IF
+		IF NOT Y_UP AND NOT Y_DOWN (*если нет команд от ПИД то не подавать команды*)
+			THEN bMode :=0;
+		END_IF
+	END_IF
+	IF PLC_PRG.Alarm.bErr70TempAir THEN  (* если неисправность по высокой Т *)
+		IF bModeBurner=1 OR bModeBurner=3 AND rZad1>35 THEN
+			TP_BurnerDec(IN := TRUE, PT := UINT_TO_TIME(uiBurner1_Tmax));
+			IF TP_BurnerDec.Q THEN
+				bMode:=2; (* то уменьшить мощность Г1*)
+			ELSE
+				bMode:=0;
+				TP_BurnerDec(IN := FALSE, PT := UINT_TO_TIME(uiBurner1_Tmax));
+			END_IF
+		END_IF
+
+		IF bModeBurner=2 OR bModeBurner=4 AND rZad2>35 THEN
+			TP_BurnerDec(IN := TRUE, PT := UINT_TO_TIME(uiBurner2_Tmax));
+			IF TP_BurnerDec.Q THEN
+				bMode:=4; (* то уменьшить мощность Г2*)
+			ELSE
+				bMode:=0;
+				TP_BurnerDec(IN := FALSE, PT := UINT_TO_TIME(uiBurner2_Tmax));
+			END_IF
+		END_IF
+
+		IF bModeBurner=5 AND rZad1>35 THEN
+			TP_BurnerDec(IN := TRUE, PT := UINT_TO_TIME(uiBurner1_Tmax));
+			IF TP_BurnerDec.Q THEN
+				bMode:=5; (* то уменьшить мощность Г1 и Г2*)
+			ELSE
+				bMode:=0;
+				TP_BurnerDec(IN := FALSE, PT := UINT_TO_TIME(uiBurner1_Tmax));
+			END_IF
+		ELSIF bModeBurner=5 AND rZad1<35 THEN
+			bModeBurner:=3;
+		END_IF
+
+		IF bModeBurner=6 AND rZad2>35 THEN
+			TP_BurnerDec(IN := TRUE, PT := UINT_TO_TIME(uiBurner2_Tmax));
+			IF TP_BurnerDec.Q THEN
+				bMode:=5; (* то уменьшить мощность Г1 и Г2*)
+			ELSE
+				bMode:=0;
+				TP_BurnerDec(IN := FALSE, PT := UINT_TO_TIME(uiBurner2_Tmax));
+			END_IF
+		ELSIF bModeBurner=6 AND rZad2<35 THEN
+			bModeBurner:=4;
+		END_IF
+	END_IF
+ELSE
+bPIDmax2:=FALSE;bPIDmin2 :=FALSE;
+(* bMode := 0;*)
 END_IF
 
 (*reset*)
-IF NOT bInput1 AND NOT  bInput2
+IF NOT bInput1 AND NOT bInput2
 THEN bMode := 0;
 END_IF
 
-
 CASE bMode OF
-0 : bPIDmax1:=FALSE;bPIDmin1 :=FALSE;  bPIDmax2:=FALSE;bPIDmin2 :=FALSE; rNod1:=0; rNod2:=0;
-1 : bPIDmax1:=TRUE; rNod1:=20.5; bPIDmax2:=FALSE; bPIDmin1:= FALSE; bPIDmin2 :=FALSE;
-2 : bPIDmax2:=TRUE; rNod2:=20.5; bPIDmin1:= FALSE; bPIDmin2 :=FALSE;
-3 : bPIDmin2 :=TRUE; rNod2:=20.5; bPIDmax1:=FALSE; bPIDmax2:=FALSE;
-4 : bPIDmin1:= TRUE; rNod1:=21; bPIDmax1:=FALSE; bPIDmax2:=FALSE;bPIDmin2 :=FALSE;
-
-5 : bPIDmax2:=TRUE; rNod2:=20.5; bPIDmax1:=FALSE; bPIDmin2:= FALSE; bPIDmin1 :=FALSE;
-6 : bPIDmax1:=TRUE; rNod1:=20.5; bPIDmin2:= FALSE; bPIDmin1 :=FALSE;
-7 : bPIDmin1 :=TRUE; rNod1:=20.5; bPIDmax2:=FALSE; bPIDmax1:=FALSE;
-8 : bPIDmin2:= TRUE; rNod2:=20.5; bPIDmax2:=FALSE; bPIDmax1:=FALSE;bPIDmin1 :=FALSE;
-(*работа на одной горелки при аварии второй*)
-9 : bPIDmax1:=TRUE; rNod1:= 41; bPIDmin1 :=FALSE;
-10 : bPIDmin1:=TRUE; rNod1:= 41; bPIDmax1:=TRUE;
-11 : bPIDmax2:=TRUE; rNod2:= 41; bPIDmin2 :=FALSE;
-12 : bPIDmin2:=TRUE; rNod2:= 41; bPIDmax2:=TRUE;
-13 : bPIDmax1:=FALSE; bPIDmax2:=FALSE; rNod1:=0; rNod2:=0; bPIDmin1:=TRUE; bPIDmin2:=TRUE;
+0 : bPIDmax1:=FALSE; bPIDmin1:=FALSE; bPIDmax2:=FALSE; bPIDmin2:=FALSE;
+1 : bPIDmax1:=TRUE;  bPIDmin1:=FALSE; bPIDmax2:=FALSE; bPIDmin2:=FALSE; (* команда БОЛЬШЕ мощ Г 1*)
+2 : bPIDmax1:=FALSE; bPIDmin1:=TRUE;  bPIDmax2:=FALSE; bPIDmin2:=FALSE; (* команда МЕНЬШЕ мощ Г 1*)
+3 : bPIDmax1:=FALSE; bPIDmin1:=FALSE; bPIDmax2:=TRUE;  bPIDmin2:=FALSE; (* команда БОЛЬШЕ мощ Г 2*)
+4 : bPIDmax1:=FALSE; bPIDmin1:=FALSE; bPIDmax2:=FALSE; bPIDmin2:=TRUE;  (* команда МЕНЬШЕ мощ Г 2*)
+5 : bPIDmax1:=FALSE; bPIDmin1:=TRUE;  bPIDmax2:=FALSE; bPIDmin2:=TRUE;  (* команда МЕНЬШЕ мощ Г 1 и 2*)
 END_CASE
 END_FUNCTION_BLOCK
 
@@ -654,22 +947,14 @@ END_IF
 		THEN bGen2Out1 := FALSE; bGen2Out2 := FALSE;
 		END_IF
 
-IF bGen1Out1  AND NOT bError1
-	OR   bError2 AND bStart1
-	OR bStart_out1_2
-	OR bStart1 AND bStart2
-	OR bGen2Out2 AND NOT bError1
-	(*OR  NOT bError1 AND bStart2 AND bError2 *)
+IF (bGen1Out1 AND bStart1 AND NOT bError1)
+	OR bError2 OR bStart_out1_2
 THEN bOut1 := TRUE;
 ELSE bOut1 := FALSE;
 END_IF
 
-IF bGen1Out2 AND NOT bError2
-	OR bError1 AND bStart2
-	OR bStart_out1_2
-	OR bStart1 AND bStart2
-	OR bGen2Out1 AND NOT bError2
-	(*OR  NOT bError2 AND bStart1 AND bError1 (*запуск второго элем.*)*)
+IF (bGen2Out1 AND bStart2 AND NOT bError2)
+	OR bError1 OR bStart_out1_2
 THEN bOut2 := TRUE;
 ELSE bOut2 := FALSE;
 END_IF
@@ -699,63 +984,94 @@ END_FUNCTION_BLOCK
 FUNCTION_BLOCK ZadPower_FB
 VAR_INPUT
 	bStart : BOOL;
-	bPIDmax : BOOL;
-	bPIDmin : BOOL;
-	t_min : REAL;
-	t_poin_nod : REAL;
+	bPIDmax : BOOL;  (*гаа - формировать импульсы на Увеличивать мощность*)
+	bPIDmin : BOOL;  (*гаа - формировать импульсы на МЕНЬШЕ мощность*)
+	t_min : UINT; 	(*мин.длительность команды, мсек*)
+	t_max : UINT; 	(*макс.длительность команды, мсек*)
+	uiFullMove : UINT;  (*время полного хода горелки, с*)
 END_VAR
 VAR_OUTPUT
 	bOpen1 : BOOL;
 	bClose1 : BOOL;
-	rez_hod : REAL; (*значение мощности*)
+	rCur_power : REAL; (*значение мощности*)
 	bStartBurner : BOOL;
 END_VAR
 VAR
-
-	TON_Pod : TON;
-	CTUD1 : CTUD;
-	TP_open: TP;
-	TP_close : TP;
+	TON_open: TON;
+	TON_close : TON;
+	TOF_open: TOF;
+	TOF_close : TOF;
+	F_TRIG_open: F_TRIG;
+	F_TRIG_close: F_TRIG;
+	T_open_Moment: TIME;
+	T_close_Moment: TIME;
+	T_open_Full: TIME;
+	T_close_Full: TIME;
+	rOpen_Full: REAL;
+	rClose_Full: REAL;
+	TON_FullMove_open: TON;
+	TON_FullMove_close: TON;
 END_VAR
 (* @END_DECLARATION := '0' *)
-TON_Pod(IN:= bStart, PT:= t#2s, Q=>, ET=> );
 (*старт горелки *)
-bStartBurner := SEL (bStart, FALSE, TRUE);
-IF TON_Pod.Q
-THEN
-	TP_open(
-		IN:= NOT TP_open.Q AND bPIDmax  AND (rez_hod<100),
-		PT:=  REAL_TO_TIME (t_min*1000), Q=> , ET=> );
-	TP_close(
-		IN:= NOT TP_close.Q AND  bPIDmin  AND (rez_hod >= 0), (*как задавать NOT bPID кодта требуется мин *)
-		PT:= REAL_TO_TIME (t_min*1000), Q=> , ET=> );
+bStartBurner := bStart;
+(*регулирование мощности горелки*)
+IF bStart THEN
+	TON_open(
+		IN:= bPIDmax,
+		PT:= UINT_TO_TIME(t_max));
+	TON_close(
+		IN:= bPIDmin,
+		PT:= UINT_TO_TIME(t_max));
+
+	(*Выдача команд УВ на ОР*)
+	bOpen1 := bPIDmax AND NOT TON_open.Q;
+	bClose1 := bPIDmin AND NOT TON_close.Q;
+
+	(*Подсчёт длительности команд УВ*)
+	F_TRIG_open(CLK:=bOpen1);
+	IF bOpen1 THEN
+		TON_FullMove_open(IN:=TRUE, PT:=UINT_TO_TIME(uiFullMove*1000));
+	ELSIF F_TRIG_open.Q THEN
+		TON_FullMove_open(ET=>T_open_Moment); TON_FullMove_open(IN:=FALSE);
+		T_open_Full:= T_open_Full+T_open_Moment;
+	END_IF
+	F_TRIG_close(CLK:=bClose1);
+	IF bClose1 THEN
+		TON_FullMove_close(IN:=TRUE, PT:=UINT_TO_TIME(uiFullMove*1000));
+	ELSIF F_TRIG_close.Q THEN
+		TON_FullMove_close(ET=>T_close_Moment); TON_FullMove_close(IN:=FALSE);
+		T_close_Full:= T_close_Full+T_close_Moment;
+	END_IF
+ELSE
+	T_open_Full:=T#0MS;
+	T_close_Full:=T#0MS;
+	F_TRIG_open(CLK:=FALSE);
+	F_TRIG_close(CLK:=FALSE);
+	TON_FullMove_open(IN:=FALSE);
+	TON_FullMove_close(IN:=FALSE);
 END_IF
 
-	CTUD1.PV := REAL_TO_WORD(10*t_min *t_poin_nod);
-	CTUD1(
-		CU:= NOT TP_open.Q,
-		CD:= NOT TP_close.Q,
-		RESET:= ,
-		LOAD:= ,
-		PV:= ,
-		QU=> ,
-		QD=> ,
-		CV=> );
-
-rez_hod := (WORD_TO_REAL(CTUD1.CV-1)*t_min*100/t_poin_nod);
-
-IF rez_hod>100
-THEN rez_hod:= 100;
-ELSIF rez_hod<0
-THEN rez_hod:= 0;
+(*Дататипизация*)
+rOpen_Full:=TIME_TO_REAL(T_open_Full) / 1000;
+rClose_Full:=TIME_TO_REAL(T_close_Full) / 1000;
+(*Контроль границ*)
+IF	rOpen_Full-rClose_Full > uiFullMove THEN
+	T_open_Full:= UINT_TO_TIME(uiFullMove*1000);
+	T_close_Full:= T#0MS;
+	rOpen_Full:= uiFullMove;
+	rClose_Full:= 0;
+ELSIF
+	rOpen_Full-rClose_Full < 0 THEN
+	T_open_Full:= T#0MS;
+	T_close_Full:= T#0MS;
+	rOpen_Full:= 0;
+	rClose_Full:= 0;
 END_IF
-(*сброс счётчика  *)
-IF   bStart
-THEN CTUD1.RESET := FALSE;
-ELSE CTUD1.RESET := TRUE;
-END_IF
-bOpen1 := SEL (TP_open.Q , FALSE, TRUE);
-bClose1 := SEL (TP_close.Q, FALSE, TRUE);
+
+(*Расчёт %мощности горелки от длительности выданных команд УВ и времени полного хода горелки, замеренного по факту, введенного с панели*)
+rCur_power:= (rOpen_Full - rClose_Full) * 100 / uiFullMove;
+
 END_FUNCTION_BLOCK
 
 
@@ -839,8 +1155,10 @@ VAR
 	UZnoReady_BO2Got : UZnoReady_FB;
 
 	bEnebleTonHeating: BOOL;		(*Включить счётчик 300 сек на аварию эл обогревателя*)
+	rtEnebleHeating: R_TRIG;
 	rTempCO: REAL;
 	TonHeating: TON;
+	TofHeating: TOF;
 	Block_ElectricalHeating: Block_FB;
 	bK3Off : BOOL; (*к3 не включился*)
 
@@ -945,6 +1263,8 @@ VAR
 	tonBP202_PressDropTG4 : TON;
 	bErrBO1ob: BOOL; (*общая авария ВО не достигнута частота и авария*)
 	bErrBO2ob: BOOL;
+	BlockBP1PresHing : Block_FB;
+	bErrBP1_Hing : BOOL;
 	BlockBP2PresLow : Block_FB;
 	bErrBP2_Low : BOOL;
 	BlockBP2PresHing : Block_FB;
@@ -986,7 +1306,7 @@ VAR
 	FanObduva2 : FanObduva_FB;
 	wRateBO2 : WORD  :=35;
 
-	PIDburner1and2 : PID_PWM_CE;
+	PIDburner1and2 : PID_PWM_ASUPRO; (*PID_PWM_CE;*)
 	bObduv : BOOL;
 
 	RS_Obduv : RS;
@@ -997,7 +1317,7 @@ VAR
 	ZadPowerBuner2 : ZadPower_FB;
 
 (*Настройка ПИД 2*)
-	PIDburner3and4 : PID_PWM_CE;
+	PIDburner3and4 : PID_PWM_ASUPRO;  (*PID_PWM_CE;*)
 	SwitcherBurner3 : Switcher_FB;
 	SwBurner3and4 : SwBurner_FB;
 	ZadPowerBuner3 : ZadPower_FB;
@@ -1029,18 +1349,61 @@ VAR
 	SAY_StartBurner4: BOOL;
 	ModeSummer: BOOL;
 	ModeSummer2: BOOL;
+
+	Period_PWM: INT :=200;  (*прямопропорциональное увеличичение периода и длительности команд УВ*)
+	Temp_Dz: REAL :=1.0; (*гаа : зона нечуств ПИД-регуляторов горелок, град. *)
+	FirstScan : BOOL := FALSE; 				(* флаг старта программы и записи первоначальных уставок *)
+(*гаа используется только при отладке ППО в режиме эмуляции*)
+	Temp_Kp: REAL := 0.1; (*гаа :коэф пропорц.  ПИД-регулятора, Кп = 0.1 *)
+	Temp_Ki: REAL :=200;  (*гаа :коэф интегр.  ПИД-регулятора*)
+	Temp_Kd: REAL;
+	Temp_T: REAL;  (*используется только при отладке ППО в режиме эмуляции*)
 END_VAR
 (* @END_DECLARATION := '0' *)
+(*--------------- гаа : настройка параметров при включении питания/сброса------------------------*)
+IF NOT FirstScan THEN  (* выполнение действий при первом старте ППО*)
+   (*Инициализация сохранённых значений уставок*)
+	r4x37 := REAL_TO_WORD(wPID1prop * 100.0); (*гаа : на панели размерность Кп * 100*)
+	r4x38 := wPID1intg ;
+	r4x39 := wPID1diff ;
 
+	r4x40  := REAL_TO_WORD(wPID2prop * 100.0);
+	r4x41 := wPID2intg ;
+	r4x42 := wPID2diff ;
+
+	r4x35 := wPanelZad1;
+	r4x36 := wPanelZad2;
+	r4x26 := wYstavkaCO;
+
+	r4x47	:= uiBurner1_FullMove; (*время полного хода горелки*)
+	r4x48	:= uiBurner2_FullMove;
+	r4x49	:= uiBurner3_FullMove;
+	r4x50	:= uiBurner4_FullMove;
+	r4x51	:= uiBurner1_Tmin;
+	r4x52	:= uiBurner1_Tmax;
+	r4x53	:= uiBurner2_Tmin;
+	r4x54	:= uiBurner2_Tmax;
+	r4x55	:= uiBurner3_Tmin;
+	r4x56	:= uiBurner3_Tmax;
+	r4x57	:= uiBurner4_Tmin;
+	r4x58	:= uiBurner4_Tmax;
+
+	FirstScan := TRUE;
+END_IF
+
+(*------------------------------------------------------------------------------------------------------------------*)
 PLC_PRG.PLC_PRG.sayANDpanel();
 
-IF b0x155  THEN  PLC_PRG.PLC_PRG.ModeManual(); b0x132:=TRUE; (*b0x155 кнопка перехода на панели*)
-
-ELSE PLC_PRG.Alarm();
-           PLC_PRG.ModeWork();
-           PLC_PRG.Periphery();
- b0x132:=FALSE; (*индикатор ручного режима*)
+IF b0x155 THEN
+	PLC_PRG.PLC_PRG.ModeManual();
+	b0x132:=TRUE; (*b0x155 кнопка перехода на панели*)
+ELSE
+	PLC_PRG.Alarm();
+	PLC_PRG.ModeWork();
+	PLC_PRG.Periphery();
+	b0x132:=FALSE; (*индикатор ручного режима*)
 END_IF
+
 
 END_PROGRAM
 ACTION	Alarm:
@@ -1055,28 +1418,28 @@ invAlarm_Voltage(
 	bError=> bErrVoltage);
 
 (*3*)(*Неисправность электрообогрева секции обслуживания*)
-bEnebleTonHeating := SEL (K5_EleHeatingEnable, FALSE, TRUE);
-
 IF K5_EleHeatingEnable AND NOT K3_ElectricalHeating
-THEN bK3Off := TRUE; bEnebleTonHeating := TRUE;
-ELSE bK3Off := FALSE; bEnebleTonHeating := FALSE;
+THEN bK3Off := TRUE;
+ELSE bK3Off := FALSE;
 END_IF
 
+rtEnebleHeating(CLK:= K5_EleHeatingEnable,Q=> bEnebleTonHeating);
 IF bEnebleTonHeating     (*Включить счётчик 300 сек на аварию эл обогревателя*)
 THEN
-rTempCO :=  BK3_tempCO; (*запомнить*)
-TonHeating.IN := TRUE;
-bEnebleTonHeating := FALSE; (*сброс *)
-ELSE TonHeating.IN := FALSE;
+	rTempCO:= BK3_tempCO; (*запомнить*)
+	TonHeating.IN:= TRUE; (*запустить таймер*)
+	bEnebleTonHeating:= FALSE; (*сброс *)
 END_IF
+IF NOT K5_EleHeatingEnable THEN TonHeating.IN:= FALSE; END_IF
+TonHeating(pt:= t#10M);
+TofHeating(IN:=TonHeating.Q, pt:=t#7s); (*задержка, чтобы Block_ElectricalHeating успел схватить аварию через t#5s*)
 (*за 300 сек темп не поднялась на 2 гр*)
-IF TonHeating.Q AND (rTempCO + 2 > BK3_tempCO) OR bK3Off
-THEN Block_ElectricalHeating.input := TRUE;
-ELSE  Block_ElectricalHeating.input := FALSE;
+IF TofHeating.Q AND (rTempCO + 2 > BK3_tempCO) OR bK3Off
+THEN
+	Block_ElectricalHeating.input := TRUE; TonHeating.IN:= FALSE;
+ELSE
+	Block_ElectricalHeating.input := FALSE;
 END_IF
-
-TonHeating(pt:= t#300s);
-
 Block_ElectricalHeating(bError=> bErrElectricalHeating);
 
 (*4*)(*Неисправность цепей вентилятора обдува 1 (М100)*)
@@ -1143,14 +1506,14 @@ Block_ValveHeating(bError=> bErrValveHeating);
 ErrorBurner1(
 	start:= K104_StartBurner1,
 	lampWork:= K105_Burner1Work,
-	lampAlarm:= K106_Burner1Error,
+	lampAlarm:= K106_Burner1Error OR (K105_Burner1Work AND bErr80tempAir),
 	error=>bErrBurner1 );
 
 (*10*)(*Неисправность горелки 2*)
 ErrorBurner2(
 	start:= K109_StartBurner2,
 	lampWork:= K110_Burner2Work,
-	lampAlarm:= K111_Burner2Error,
+	lampAlarm:= K111_Burner2Error OR (K110_Burner2Work AND bErr80tempAir),
 	error=> bErrBurner2 );
 
 (*11*)(*Неисправность горелок 1 и 2*)
@@ -1163,14 +1526,14 @@ END_IF
 ErrorBurner3(
 	start:= K204_StartBurner3 ,
 	lampWork:= K205_Burner3Work,
-	lampAlarm:= K206_Burner3Error,
+	lampAlarm:= K206_Burner3Error OR (K205_Burner3Work AND bErr80tempAir),
 	error=> bErrBurner3 );
 
 (*13*)(*Неисправность горелки 4*)
 ErrorBurner4(
 	start:= K209_StartBurner4,
 	lampWork:= K210_Burner4Work,
-	lampAlarm:= K211_Burner4Error ,
+	lampAlarm:= K211_Burner4Error OR (K210_Burner4Work AND bErr80tempAir),
 	error=> bErrBurner4);
 
 (*14*)(*Неисправность горелок 3 и 4*)
@@ -1332,9 +1695,14 @@ BlockErrBP2_presHing(
 	input:= ErrBP2_presHing  >= 16#7,
 	bError=> bErrBP2_presHing);
 
+(*Высокое давление воздуха в воздуховоде (ВР1)*)
+BlockBP1PresHing(
+	input:= BP1_presAir > 800,
+	bError=> bErrBP1_Hing);
+
 (*43*)(*Низкое давление газа до регулятора*)
 IF b0x141 AND (BP2_presHing <= 20)
-OR b0x142 AND (BP2_presHing <=20)
+OR b0x142 AND (BP2_presHing <= 20)
 OR b0x144 AND (BP2_presHing <= 20)
 OR b0x146 AND (BP2_presHing <= 20)
 THEN BlockBP2PresLow.input := TRUE;
@@ -1344,8 +1712,8 @@ BlockBP2PresLow(bError=> bErrBP2_Low);
 
 (*44*)(*Высокое давление газа до регулятора*)
 IF  BP2_presHing >=520
-THEN BlockBP2PresLow.input := TRUE;
-ELSE  BlockBP2PresLow.input := FALSE;
+THEN BlockBP2PresHing.input := TRUE;
+ELSE  BlockBP2PresHing.input := FALSE;
 END_IF
 BlockBP2PresHing(bError=> bErrBP2_Hing);
 
@@ -1355,14 +1723,14 @@ BlockErrBP3_presLow(
 	bError=> bErrBP3_presLow);
 
 (*46*)(*Низкое давление газа после регулятора *)
-IF b0x141 AND (BP3_presLow < 5)
-OR b0x142 AND (BP3_presLow < 5)
-OR b0x144 AND (BP3_presLow < 5)
-OR b0x146 AND (BP3_presLow < 5)
+IF b0x141 AND (BP3_presLow < 4)
+OR b0x142 AND (BP3_presLow < 4)
+OR b0x144 AND (BP3_presLow < 4)
+OR b0x146 AND (BP3_presLow < 4)
 THEN tonBP3PresLow.IN := TRUE;
 ELSE  tonBP3PresLow.IN := FALSE;
 END_IF
-tonBP3PresLow(PT:=t#30s);
+tonBP3PresLow(PT:=t#1s);
 BlockBP3PresLow(
 	input:=tonBP3PresLow.Q ,
 	bError=> bErrBP3_Low);
@@ -1380,8 +1748,8 @@ BlockBP3PresHing(bError=> bErrBP3_Hing);
 (*48*)(*Перепад давления теплообменника 1*)
 tonBP101_PressDropTG1 (in:= , PT:= T#30s);
 
-IF K105_Burner1Work  AND K103_BO1  AND BP101_PressDropTG1 AND NOT K24_CostsAirNormalHude
-THEN   tonBP101_PressDropTG1.IN:= TRUE;
+IF K105_Burner1Work AND K103_BO1 AND NOT BP101_PressDropTG1 (*AND NOT K24_CostsAirNormalHude*)
+THEN  tonBP101_PressDropTG1.IN:= TRUE;
 ELSE  tonBP101_PressDropTG1.IN := FALSE;
 END_IF
 
@@ -1395,7 +1763,7 @@ END_IF
 (*49*)(*Перепад давления теплообменника 2*)
 tonBP102_PressDropTG2 (in:= , PT:= T#30s);
 
-IF K110_Burner2Work  AND K103_BO1  AND BP102_PressDropTG2 AND NOT K24_CostsAirNormalHude
+IF K110_Burner2Work AND K103_BO1 AND NOT BP102_PressDropTG2 (*AND NOT K24_CostsAirNormalHude*)
 THEN   tonBP102_PressDropTG2.IN:= TRUE;
 ELSE  tonBP102_PressDropTG2.IN := FALSE;
 END_IF
@@ -1417,7 +1785,7 @@ END_IF
 
 tonBP201_PressDropTG3(in:= , PT:= T#30s);
 
-IF K205_Burner3Work AND K203_BO2On  AND  BP201_PressDropTG3 AND NOT K24_CostsAirNormalHude
+IF K205_Burner3Work AND K203_BO2On AND NOT BP201_PressDropTG3 (*AND NOT K24_CostsAirNormalHude*)
 THEN   tonBP201_PressDropTG3.IN:= TRUE;
 ELSE  tonBP201_PressDropTG3.IN := FALSE;
 END_IF
@@ -1432,7 +1800,7 @@ END_IF
 (*52*)(*Перепад давления теплообменника 4*)
 tonBP202_PressDropTG4(in:= , PT:= T#30s);
 
-IF K210_Burner4Work AND K203_BO2On  AND BP202_PressDropTG4 AND NOT K24_CostsAirNormalHude
+IF K210_Burner4Work AND K203_BO2On AND NOT BP202_PressDropTG4 (*AND NOT K24_CostsAirNormalHude*)
 THEN   tonBP202_PressDropTG4.IN:= TRUE;
 ELSE  tonBP202_PressDropTG4.IN := FALSE;
 END_IF
@@ -1490,7 +1858,6 @@ OR bErr350_tempTO1
 OR bErr350_tempTO2
 OR bErrBK1_tempGas
 OR bErrBK2_tempAir
-OR bErr80tempAir
 OR bErrBP2_Low
 OR bErrBP2_Hing
 OR bErrBP3_presLow
@@ -1514,7 +1881,6 @@ OR bErr350_tempTO3
 OR bErr350_tempTO4
 OR bErrBK1_tempGas
 OR bErrBK2_tempAir
-OR bErr80tempAir
 OR bErrBP2_Low
 OR bErrBP2_Hing
 OR bErrBP3_presLow
@@ -1555,9 +1921,9 @@ END_IF
 
 (*общая авария ВО1*)
 IF K1_AlarmOffVoltage
+OR bErrPressDropAirFilter
 OR bErrBP1_presAir
-OR  bErrPressDropAirFilter
-OR (BP1_presAir > 800)
+OR bErrBP1_Hing
 OR bErrBO1ob
 THEN bErrObBO1 := TRUE;
 ELSE bErrObBO1 := FALSE;
@@ -1565,11 +1931,11 @@ END_IF
 
 (*общая авария ВО2*)
 IF K1_AlarmOffVoltage
+OR bErrPressDropAirFilter
 OR bErrBP1_presAir
-OR  bErrPressDropAirFilter
-OR (BP1_presAir > 800)
+OR bErrBP1_Hing
 OR bErrBO1ob
-THEN bErrObBO1 := TRUE;
+THEN bErrObBO2 := TRUE;
 ELSE bErrObBO2 := FALSE;
 END_IF
 
@@ -1587,11 +1953,11 @@ OR bErr350_tempTO3 OR bErr350_tempTO4
 OR bErrBK1_tempGas OR bErrTempGas
 OR bErrBK2_tempAir OR bErr60TempAir OR bErr70TempAir
 OR bErr80tempAir OR bErrBK3_tempCO OR bErr30TempCO
-OR bErr10TempCO OR bErrBP1_presAir OR bErrBP2_presHing
+OR bErr10TempCO OR bErrBP1_presAir OR bErrBP1_Hing OR bErrBP2_presHing
 OR bErrBP2_Low OR bErrBP2_Hing OR bErrBP3_presLow
 OR bErrBP3_Low OR bErrBP3_Hing OR bErrBP101_PressDropTG1
 OR bErrBP102_PressDropTG2 OR bErrBP201_PressDropTG3
-OR bErrBP202_PressDropTG4
+OR bErrBP202_PressDropTG4 OR NOT SB1_PressKeyErrorStop
 THEN K16_ABGMError := FALSE ;
 ELSE K16_ABGMError := TRUE ;
 END_IF
@@ -1603,6 +1969,7 @@ OR bErrValveGas
 OR bErrBP2_presHing
 OR bErrBP2_Hing
 OR bErrBP2_Low
+OR bErrBP3_Low
 OR bErrTempGas
 OR bErrBK1_tempGas
 THEN bErrObGasValve := TRUE;
@@ -1715,7 +2082,7 @@ OR b0x144  AND bStatrAVGM (*b0x144 гор 3*)
 OR b0x142 AND bStatrAVGM (*b0x142 гор 2*)
 OR b0x146 AND bStatrAVGM (*b0x146 гор 4*)
 THEN b0x138 := TRUE;
-ELSE b0x138 := FALSE ;
+ELSE b0x138 := FALSE;
 END_IF
 
 (*режим лето*)
@@ -1727,7 +2094,7 @@ ELSE ModeSummer := FALSE; ModeSummer2 :=FALSE; b0x116 := FALSE;
 END_IF
 
 (*Пуск в режимов*)
-IF bStatrAVGM AND NOT bErr10TempCO
+IF bStatrAVGM
 THEN
 	IF b0x136 AND NOT bErrObBO1 OR ModeSummer OR SAY_StartBO1 AND NOT bErrObBO1(*BO 1*)
 	THEN byMode := 1;
@@ -1758,52 +2125,52 @@ THEN
 ELSE byMode := 0;
 END_IF
 
-(*пуск горело 1 и 2 *)
-IF byMode = 3
-THEN SwitcherBurner1.bStart1 := TRUE;
-ELSE SwitcherBurner1.bStart1 := FALSE;
-END_IF
-
-IF byMode = 4
-THEN SwitcherBurner1.bStart2 := TRUE;
-ELSE SwitcherBurner1.bStart2 := FALSE;
-END_IF
-
-IF byMode = 5
-THEN SwitcherBurner1.bStart_out1_2 := TRUE;
-ELSE SwitcherBurner1.bStart_out1_2 := FALSE;
-END_IF
-
 (*запуск ПИД если выбран один из режимов обогрева 1 линии*)
 IF byMode = 3 OR byMode = 4 OR byMode = 5
 THEN PIDburner1and2.AVT_REG := TRUE;
 ELSE PIDburner1and2.AVT_REG := FALSE;
 END_IF
 
-SwitcherBurner1(
-	bError1 := bErrObBurner1 ,
-	bError2 := bErrObBurner2 );
-
 PIDburner1and2(
-	ACTUAL:= Mode5_15_PID.wYstavkaPID_FB,
+	ACTUAL:= Mode5_15_PID.wYstavkaPID_FB, (*Temp_T*)
 	SET_POINT:= Mode5_15_PID.wZadaniePID_FB,
-	KP:= wPID1prop ,
-	TN:= wPID1intg,
-	TV:=  wPID1diff,
-	D_ZONE:= ,
+	KP:= wPID1prop, (* Temp_Kp*)
+	TN:= wPID1intg, (* Temp_Ki*)
+	TV:=  wPID1diff, (*Temp_Kd*)
+	D_ZONE:= Temp_Dz ,   (*гаа = 2 С*)
 	kn_RUCH_Y_UP:= ,
-	kn_RUCH_Y_DOWN:= , 
-	Time_PWM:= 500  );
+	kn_RUCH_Y_DOWN:= ,
+	Time_PWM:= Period_PWM  ); (*прямопропорциональное увеличичение периода И длительности команд!- бессмысленно, при любом его значении результат: одинаковое перерегулирование ОР.
+								Используем для задания периода команд УВ, длительность команд УВ ограничеваем в ZadPowerBunerХ(ZadPower_FB).t_max*)
+
+(*
+PIDburner1and2(
+	ACTUAL:= Temp_T,
+	SET_POINT:= Mode5_15_PID.wZadaniePID_FB,
+	KP:=  Temp_Kp,
+	TN:=  Temp_Ki,
+	TV:=  Temp_Kd,
+	D_ZONE:= Temp_Dz ,   (*гаа = 2 С*)
+	kn_RUCH_Y_UP:= ,
+	kn_RUCH_Y_DOWN:= ,
+	Time_PWM:= Period_PWM  ); (*гаа : период подачи команды(импульсов) ПИД-ом, в циклах ППО ПЛК, а  длительность импульса расчитывает ПИД .   Заводская была = 500*)
+							  (*гаа 130 циклов = 130*0,3 = 39 с*, соотв-ет макс. длительности команды и должен быть не более времени полного хода горелки(2с меандр * 20с) от 0% до 100% *)
+*)
 
 SwBurner1and2(
-	bInput1:= SwitcherBurner1.bOut1,
-	bInput2:= SwitcherBurner1.bOut2,
-	rZad1:= ZadPowerBuner1.rez_hod,
-	rZad2:= ZadPowerBuner2.rez_hod,
+	bInput1:= (byMode = 3 OR byMode = 5),
+	bInput2:= (byMode = 4 OR byMode = 5),
+	rZad1:= ZadPowerBuner1.rCur_power,
+	rZad2:= ZadPowerBuner2.rCur_power,
 	Y_UP:= PIDburner1and2.Y_UP,
-	Y_DOWN:= PIDburner1and2.Y_DOWN ,
-	bInError1 :=  SwitcherBurner1.bOutError1,
-	bInError2 := SwitcherBurner1.bOutError2,
+	Y_DOWN:= PIDburner1and2.Y_DOWN,
+	bD_Zone:=PIDburner1and2.D_ZONE_,
+	bInWork1:= K105_Burner1Work,
+	bInWork2:= K110_Burner2Work,
+	bInError1 :=  bErrObBurner1, (*гаа*)(*SwitcherBurner1.bOutError1,*)
+	bInError2 := bErrObBurner2, (*гаа*)(*SwitcherBurner1.bOutError2,*)
+	wHourBurner1 := wHourBurner1,
+	wHourBurner2 := wHourBurner2,
 	rTempTO1 :=  BK101_tempTO1,
 	rTempTO2 := BK102_tempTO2);
 
@@ -1811,8 +2178,9 @@ ZadPowerBuner1(
 	bStart:= SwBurner1and2.bStartPower1,
 	bPIDmax:= SwBurner1and2.bPIDmax1,
 	bPIDmin:= SwBurner1and2.bPIDmin1,
-	t_min:= 1, (*проверить *)
-	t_poin_nod:= SwBurner1and2.rNod1,
+	t_min:= uiBurner1_Tmin,
+	t_max:= uiBurner1_Tmax,
+	uiFullMove:= uiBurner1_FullMove,
 	bOpen1=> K108_maxPowerBurner1,
 	bClose1=> K107_minPowerBurner1,
 	bStartBurner => K104_StartBurner1);
@@ -1821,77 +2189,78 @@ ZadPowerBuner2(
 	bStart:= SwBurner1and2.bStartPower2,
 	bPIDmax:= SwBurner1and2.bPIDmax2,
 	bPIDmin:= SwBurner1and2.bPIDmin2,
-	t_min:= 1,
-	t_poin_nod:= SwBurner1and2.rNod2,
+	t_min:= uiBurner2_Tmin,
+	t_max:= uiBurner2_Tmax,
+	uiFullMove:= uiBurner2_FullMove,
 	bOpen1=> K113_maxPowerBurner2,
-	bClose1=> K112_minPowerBurner2 ,
+	bClose1=> K112_minPowerBurner2,
 	bStartBurner => K109_StartBurner2);
 
-
+(*
 (*запуск ВО1*)
-
-IF byMode =1 AND NOT bErrBO1ob
-OR K104_StartBurner1 AND (BK101_tempTO1>40) AND NOT bErrBO1ob
+IF byMode =1 AND NOT bErrBO1ob   (*гаа : если режим =1 - Вентиляция линии 1*)
+OR K104_StartBurner1 AND (BK101_tempTO1>40) AND NOT bErrBO1ob  (*гаа : если включена Г1 и ТО > 40 и нет аварии ВО1*)
 OR K109_StartBurner2 AND (BK102_tempTO2>40) AND NOT bErrBO1ob
 OR RS_Obduv.Q1 AND b0x141  AND NOT bErrBO1ob
 OR RS_Obduv.Q1  AND b0x142 AND NOT bErrBO1ob  (*переключатель обдува*)
-THEN FanObduva1.bRun := TRUE;
+THEN FanObduva1.bRun := TRUE; 				(*гаа : включить ВО1 *)
 ELSE FanObduva1.bRun := FALSE;
 END_IF
+*)
+(*----------------------гаа : АВТ управл. ВО1 , как ИМ 1х0*)
+FanObduva1.bRun := FanObduva1.bRun
+AND NOT (BK101_tempTO1 < 30 AND BK102_tempTO2 < 30 AND  (b0x141 OR b0x142) AND NOT bStatrAVGM)  (*ВО1 выключить если То1 И ТО2 < 30 C* И разрешены режимы обогрева Г1 или Г2 И АВГМ не работает*)
+AND NOT bErrBO1ob 	(* ВО1 выключить если Ошибка ВО1 или нажаты кнопки АО.*)
+AND NOT (NOT bStatrAVGM  AND NOT (b0x141 OR b0x142)) (* ВО1 выключить если Выключен АВГМ И НЕ включен режим Г1 или Г2.*)
+(*AND NOT  (byMode =0)  AND NOT (b0x141 OR b0x142)*)
+(*OR (byMode =1) AND NOT bErrBO1ob*) (*ВО1 включить если режим = 1 - вентиляция Линия 1*)
+OR b0x136 AND bStatrAVGM AND NOT bErrBO1ob	(*ВО1 включить если режим = 1 - вентиляция Линия 1 И Пуск АВГМ  И нет ошибки ВО1*)
+OR (((BK101_tempTO1>40) OR  (BK102_tempTO2>40)) AND ((b0x141 OR b0x142) AND bStatrAVGM AND NOT bErrBO1ob)); (*ВО1 включить если То1 или ТО2 > 40 C* И режимы работы И НЕ выключен АВГМ И НЕ ошибка ВО1*)
+(*----------------------гаа *)
+
+
 (*изменение частоты и запуск*)
 FanObduva1(
 	bModeMax:= bFanMax,
-	bOutStart=> K103_BO1,
+	bOutStart=> K103_BO1,   (*гаа : управляющий DO *)
 	wRate=> wRateBO1 );
 
-
-
-(*пуск горело 3 и 4 *)
-IF byMode = 6
-THEN SwitcherBurner3.bStart1 := TRUE;
-ELSE SwitcherBurner3.bStart1 := FALSE;
-END_IF
-
-IF byMode = 7
-THEN SwitcherBurner3.bStart2 := TRUE;
-ELSE SwitcherBurner3.bStart2 := FALSE;
-END_IF
-
-IF byMode = 8
-THEN SwitcherBurner3.bStart_out1_2 := TRUE;
-ELSE SwitcherBurner3.bStart_out1_2 := FALSE;
-END_IF
-
-(*запуск ПИД если выбран один из режимов обогрева 1 линии*)
+(*запуск ПИД если выбран один из режимов обогрева 2 линии*)
 IF byMode >=6
 THEN PIDburner3and4.AVT_REG := TRUE;
 ELSE PIDburner3and4.AVT_REG := FALSE;
 END_IF
 
+(*гаа*) (*
 SwitcherBurner3(
 	bError1 := bErrObBurner3 ,
 	bError2 := bErrObBurner4 );
-
+*)
 PIDburner3and4(
 	ACTUAL:= Mode5_15_PID.wYstavkaPID_FB,
 	SET_POINT:= Mode5_15_PID.wZadaniePID_FB,
 	KP:= wPID2prop,
 	TN:= wPID2intg,
 	TV:=  wPID2diff,
-	D_ZONE:= ,
+	D_ZONE:= Temp_Dz,			(*гаа - зона нечуств, С*)
 	kn_RUCH_Y_UP:= ,
 	kn_RUCH_Y_DOWN:= ,
-	Time_PWM:= 500  );
+	Time_PWM:= Period_PWM  );
 
 SwBurner3and4(
-	bInput1:= SwitcherBurner3.bOut1,
-	bInput2:= SwitcherBurner3.bOut2,
-	rZad1:= ZadPowerBuner3.rez_hod,
-	rZad2:= ZadPowerBuner4.rez_hod,
+	bInput1:= (byMode = 6 OR byMode = 8),
+	bInput2:= (byMode = 7 OR byMode = 8),
+	rZad1:= ZadPowerBuner3.rCur_power,
+	rZad2:= ZadPowerBuner4.rCur_power,
 	Y_UP:= PIDburner3and4.Y_UP,
-	Y_DOWN:= PIDburner3and4.Y_DOWN ,
-	bInError1 :=  SwitcherBurner3.bOutError1,
-	bInError2 := SwitcherBurner3.bOutError2,
+	Y_DOWN:= PIDburner3and4.Y_DOWN,
+	bD_Zone:=PIDburner3and4.D_ZONE_,
+	bInWork1:= K205_Burner3Work,
+	bInWork2:= K210_Burner4Work,
+	bInError1 :=  bErrObBurner3, (*SwitcherBurner3.bOutError1,*)
+	bInError2 := bErrObBurner4, (*SwitcherBurner3.bOutError2,*)
+	wHourBurner1 := wHourBurner3,
+	wHourBurner2 := wHourBurner4,
 	rTempTO1 :=  BK201_tempTO3,
 	rTempTO2 := BK202_tempTO4);
 
@@ -1899,8 +2268,9 @@ ZadPowerBuner3(
 	bStart:= SwBurner3and4.bStartPower1,
 	bPIDmax:= SwBurner3and4.bPIDmax1,
 	bPIDmin:= SwBurner3and4.bPIDmin1,
-	t_min:= 1, (*проверить *)
-	t_poin_nod:= SwBurner3and4.rNod1,
+	t_min:= uiBurner3_Tmin,
+	t_max:= uiBurner3_Tmax,
+	uiFullMove:= uiBurner3_FullMove,
 	bOpen1=>  K208_maxPowerBurner3,
 	bClose1=> K207_minPowerBurner3,
 	bStartBurner => K204_StartBurner3);
@@ -1909,13 +2279,14 @@ ZadPowerBuner4(
 	bStart:= SwBurner3and4.bStartPower2,
 	bPIDmax:= SwBurner3and4.bPIDmax2,
 	bPIDmin:= SwBurner3and4.bPIDmin2,
-	t_min:= 1,
-	t_poin_nod:= SwBurner3and4.rNod2,
+	t_min:= uiBurner4_Tmin,
+	t_max:= uiBurner4_Tmax,
+	uiFullMove:= uiBurner4_FullMove,
 	bOpen1=> K213_maxPowerBurner4,
-	bClose1=> K212_minPowerBurner4 ,
+	bClose1=> K212_minPowerBurner4,
 	bStartBurner => K209_StartBurner4);
 
-
+(*
 (*запуск ВО2*)
 IF byMode =2 AND NOT bErrBO2ob
 OR K204_StartBurner3 AND (BK201_tempTO3>40) AND NOT bErrBO2ob
@@ -1925,6 +2296,15 @@ OR RS_Obduv.Q1  AND b0x146 AND NOT bErrBO2ob  (*переключатель обдува*)
 THEN FanObduva2.bRun := TRUE;
 ELSE FanObduva2.bRun := FALSE;
 END_IF
+*)
+(*----------------------гаа : АВТ управл. ВО2 , как ИМ 1х0*)
+FanObduva2.bRun := FanObduva2.bRun
+AND NOT (BK201_tempTO3 < 30 AND BK202_tempTO4 < 30 AND (b0x144 OR b0x146)  AND NOT bStatrAVGM)	(*ВО1 выключить если То1 И ТО2 < 30 C* И режимы обогрева Г3 или Г4 И не работает АВГМ*)
+AND NOT bErrBO2ob(* ВО2 выключить если Ошибка ВО2 или нажаты кнопки АО.*)
+AND NOT (NOT bStatrAVGM  AND NOT (b0x144 OR b0x146) ) (* ВО1 выключить если Выключен АВГМ И НЕ включен режим Г3 или Г4.*)
+OR b0x139 AND bStatrAVGM AND NOT bErrBO2ob	(*ВО1 включить если режим = 1 - вентиляция Линия 1 И Пуск АВГМ  И нет ошибки ВО1*)
+OR (((BK201_tempTO3 > 40) OR  (BK202_tempTO4 > 40)) AND ((b0x144 OR b0x146) AND bStatrAVGM AND NOT bErrBO2ob)); (*ВО2 включить если То3 или ТО4 > 40 C* И режимы работы И НЕ выключен АВГМ И НЕ ошибка ВО2*)
+(*----------------------гаа *)
 
 FanObduva2(
 	bRun:= ,
@@ -1935,25 +2315,27 @@ FanObduva2(
 
 
 (*обдув*)
-IF K104_StartBurner1 OR K109_StartBurner2 OR K204_StartBurner3 OR K209_StartBurner4
+IF K104_StartBurner1 OR K109_StartBurner2 OR K204_StartBurner3 OR K209_StartBurner4   (*гаа: работает любая горелка*)
 THEN bObduv :=TRUE; (*включет переключатель RS*)
 ELSE bObduv :=FALSE;
 END_IF
 
-IF BK101_tempTO1<40 AND  BK102_tempTO2<40 AND BK201_tempTO3<40 AND BK202_tempTO4<40
+(*
+IF BK101_tempTO1<30 AND  BK102_tempTO2<30 AND BK201_tempTO3<30 AND BK202_tempTO4<30   (*гаа : если все То <30 то сброс обдува - выключить ВО у кот. работает горелка*)
 THEN  RS_Obduv.RESET1:= TRUE; (*будет держать переключатель выключенным пака тамп не опустится*)
 ELSE RS_Obduv.RESET1 := FALSE;
 END_IF
 RS_Obduv(SET:= bObduv );
 
+*)
+
 (*подача сигнала нормальный останов*)
-IF (BK101_tempTO1>40) AND  NOT bObduv
-OR (BK102_tempTO2>40) AND  NOT bObduv
-OR (BK201_tempTO3>40) AND  NOT bObduv
-OR (BK202_tempTO4>40) AND  NOT bObduv
-THEN b0x119 := TRUE;
+IF (((BK101_tempTO1 > 30 OR BK102_tempTO2 > 30) AND (b0x141 OR b0x142) AND K103_BO1) OR
+	((BK201_tempTO3 > 30 OR BK202_tempTO4 > 30) AND (b0x144 OR b0x146) AND K203_BO2On)) AND NOT bStatrAVGM
+THEN b0x119 := TRUE;  (*газ - индикация на панели НО*)
 ELSE b0x119 := FALSE;
 END_IF
+
 
 END_ACTION
 
@@ -1961,7 +2343,7 @@ ACTION	Periphery:
 (*запус АВГМ*)
 IF SA1_WorkStop
 THEN
-	IF SB4_ButStart (*алгоритв вкл от кнопки на ШУ*)
+	IF SB4_ButStart AND (b0x136 OR b0x139 OR b0x141 OR b0x142 OR b0x144 OR b0x146) (*алгоритв вкл от кнопки на ШУ*)
 	THEN bButStart := TRUE;
 			b0x115 := TRUE; (*отображение кнопки стоп на панели*)
 	END_IF
@@ -1992,9 +2374,9 @@ ELSE bStopPanel := TRUE; bStopSAYdisc := TRUE; bStopSAYmod := TRUE;
 	    bButStart:= FALSE; bStartSAYdisc := FALSE; bStartSAYmod := FALSE;
 END_IF
 
-	IF bButStart OR bStartSAYdisc OR bStartSAYmod
+	IF (bButStart OR bStartSAYdisc OR bStartSAYmod) AND NOT (bErrLine1 OR bErrLine2) AND NOT (bErrObBO1 OR bErrObBO2)
 	THEN bStatrAVGM := TRUE; K15_ABGMWork := TRUE;
-	ELSIF bStopPanel OR bStopSAYdisc OR bStopSAYmod
+	ELSIF bStopPanel OR bStopSAYdisc OR bStopSAYmod OR bErrLine1 OR bErrLine2 OR bErrObBO1 OR bErrObBO2
 	THEN bStatrAVGM := FALSE; K15_ABGMWork := FALSE;
 	END_IF
 
@@ -2054,7 +2436,7 @@ Mode5_15_PID(
 (*обогрев*)
 
 Heating(
-	byMode_FB:= , 
+	bMode_FB:= NOT ModeSummer,
 	wTempCO:= BK3_tempCO ,
 	wYstPanel:= r4x26,
 	bErrorHeating:= ,
@@ -2098,7 +2480,7 @@ b0x11 := SEL (bErrBurner1and2, FALSE, TRUE);
 b0x12 := SEL (bErrBurner3, FALSE, TRUE);
 b0x13 := SEL (bErrBurner4, FALSE, TRUE);
 b0x14 := SEL (bErrBurner3and4, FALSE, TRUE);
-b0x15 := SEL (bErrValveGas, FALSE, TRUE);
+b0x15 := SEL (bErrObGasValve, FALSE, TRUE);
 b0x16 := SEL (bErrGasPorog1, FALSE, TRUE);
 b0x17 := SEL (bErrGasPorog2, FALSE, TRUE);
 b0x18 := SEL (bErrFireHangarGPA, FALSE, TRUE);
@@ -2137,13 +2519,15 @@ b0x50 := SEL (bErrPressDropTG1and2, FALSE, TRUE);
 b0x51 := SEL (bErrBP201_PressDropTG3, FALSE, TRUE);
 b0x52 := SEL (bErrBP202_PressDropTG4, FALSE, TRUE);
 b0x53 := SEL (bErrPressDropTG3and4, FALSE, TRUE);
+b0x118:= SEL (bErrBP1_Hing, FALSE, TRUE);
+b0x159 := SEL (SB1_PressKeyErrorStop, TRUE, FALSE);
 b0x133 := SEL (K16_ABGMError, TRUE, FALSE);
 (*инфа о включенных эл.*)
 
 b0x117 := SEL (K7_BB1On, FALSE, TRUE);
 b0x55 := SEL (K22_BB2On, FALSE, TRUE);
 b0x120 := SEL (K103_BO1, FALSE, TRUE);
-b0x121 := SEL (K103_BO1, FALSE, TRUE);
+b0x121 := SEL (K203_BO2On, FALSE, TRUE);
 b0x123 := SEL (K9_GasValveOpen, FALSE, TRUE);
 b0x124 := SEL (BP101_PressDropTG1, FALSE, TRUE);
 b0x125 := SEL (K105_Burner1Work, FALSE, TRUE);
@@ -2162,7 +2546,7 @@ END_IF
 (*зелёная кнопка*)
 b0x137 := SEL (b0x136, FALSE, TRUE);
 b0x140 := SEL (b0x139, FALSE, TRUE);
-b0x154 := SEL ( b0x142, FALSE, TRUE);
+b0x154 := SEL (b0x142, FALSE, TRUE);
 b0x145 := SEL (b0x144, FALSE, TRUE);
 b0x143 := SEL (b0x141, FALSE, TRUE);
 b0x147 := SEL (b0x146, FALSE, TRUE);
@@ -2188,14 +2572,16 @@ r4x23 := REAL_TO_INT(BK2_tempAir);
 r4x24 := REAL_TO_INT(TempRoom);
 r4x25 := REAL_TO_INT(BK3_tempCO);
 
+wPanelZad1 := r4x35; (*гаа : Чтение из панели*)
+wPanelZad2 := r4x36;
 
 (*PID*)
 
-	wPID1prop := r4x37;
+	wPID1prop := r4x37 / 100.0; (*гаа : на панели размерность Кп * 100*)
 	wPID1intg   :=r4x38;
 	wPID1diff    := r4x39;
 
-	wPID2prop := r4x40;
+	wPID2prop := r4x40  / 100.0;
 	wPID2intg   := r4x41;
 	wPID2diff    := r4x42;
 
@@ -2217,6 +2603,22 @@ r4x33	:= wHourBO2  ;
 r4x30	:= wHourBB1  ;
 r4x34	:= wHourBB2  ;
 
+r4x43	:= REAL_TO_INT(ZadPowerBuner1.rCur_power);
+r4x44	:= REAL_TO_INT(ZadPowerBuner2.rCur_power);
+r4x45	:= REAL_TO_INT(ZadPowerBuner3.rCur_power);
+r4x46	:= REAL_TO_INT(ZadPowerBuner4.rCur_power);
+uiBurner1_FullMove := r4x47;
+uiBurner2_FullMove := r4x48;
+uiBurner3_FullMove := r4x49;
+uiBurner4_FullMove := r4x50;
+uiBurner1_Tmin := r4x51;
+uiBurner1_Tmax := r4x52;
+uiBurner2_Tmin := r4x53;
+uiBurner2_Tmax := r4x54;
+uiBurner3_Tmin := r4x55;
+uiBurner3_Tmax := r4x56;
+uiBurner4_Tmin := r4x57;
+uiBurner4_Tmax := r4x58;
 
 (*Задание частоты*)
 (*Задание частоты ВО1*)
@@ -2253,12 +2655,12 @@ bOutReg10_8 := SEL (K109_StartBurner2  ,FALSE, TRUE);
 bOutReg10_9 := SEL (K204_StartBurner3  ,FALSE, TRUE);
 bOutReg10_10 := SEL (K209_StartBurner4  ,FALSE, TRUE);
 bOutReg10_11:= SEL ( K9_GasValveOpen ,FALSE, TRUE);
-bOutReg10_12 := SEL (K16_ABGMError  ,FALSE, TRUE);
+bOutReg10_12 := SEL (K16_ABGMError  ,TRUE, FALSE);
 bOutReg10_13 := SEL (K22_BB2On  ,FALSE, TRUE);
 bOutReg10_14 := SEL (K25_OnHeadDrainCondensat  ,FALSE, TRUE);
 bOutReg10_15 := SEL ( K10_GasPorog1 ,FALSE, TRUE);
 bOutReg11_0 := SEL ( K11_GasPorog2 ,FALSE, TRUE);
-bOutReg11_1 := SEL ( SB1_PressKeyErrorStop ,FALSE, TRUE);
+bOutReg11_1 := SEL ( SB1_PressKeyErrorStop ,TRUE, FALSE);
 bOutReg11_2 := SEL ( bErrVoltage ,FALSE, TRUE);
 bOutReg11_3 := SEL (bErrBO1ob  ,FALSE, TRUE);
 bOutReg11_4 := SEL ( bErrBO2ob  ,FALSE, TRUE);
