@@ -44,11 +44,6 @@ IF (SetPoint-Discrepancy>FeedBack OR SetPoint+Discrepancy<FeedBack) AND FeedBack
 	END_IF;
 ELSE ton1:=0; Done:=TRUE;
 END_IF;
-(*
-IF FeedBackBeat=FeedBackBeatOld AND FeedBackBeat=-1 THEN
-	Error.1:=TRUE;
- 	ton1:=0;
-END_IF;*)
 
 IF Reset AND Error<>0 THEN Error:=0; ton1:=0; END_IF;
 
