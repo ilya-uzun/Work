@@ -27,7 +27,7 @@ VAR_OUTPUT
 END_VAR
 VAR
 	FeedBackBeatOld:INT;
-	ton1:INT;
+	ton1:INT; (*Сбрасывается при Reset *)
 END_VAR
 (* @END_DECLARATION := '0' *)
 
