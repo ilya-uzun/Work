@@ -27,7 +27,7 @@ VAR_OUTPUT
 END_VAR
 VAR
 	FeedBackBeatOld:INT;
-	ton1:INT; (*РЎР±СЂР°СЃС‹РІР°РµС‚СЃСЏ РїСЂРё Reset *)
+	ton1:INT;
 END_VAR
 (* @END_DECLARATION := '0' *)
 
@@ -93,7 +93,17 @@ VAR
 
 END_VAR
 (* @END_DECLARATION := '0' *)
-
+(*Формула ПИД регулирования:
+	Y	=	Xp*Ei	+	Xi*summ(Ei)	+	Xd*dEi,
+где
+	Ei			-	рассогласование между текущим значением и уставкой
+	Summ		-	накопленная ошибка рассогласований
+	dEi			-	разница между двумя соседними рассогласованиями
+	Xp			-	пропорциональный коэффициент
+	Xi			-	интегральный коэффициент
+	Xd			-	дифференциальный коэффициент
+	Y			-	выход.
+*)
 
 IF StartIn THEN
 	IF Beat<>BeatOld THEN
@@ -158,7 +168,7 @@ ControlStateOld:=ControlState;
 
 IF ControlMode<>3 THEN
 	CASE ControlState OF
-		0:																				(*пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+		0:																				(*Полный останов*)
 			AirValveSetPoint:=0;
 			FunStart:=FALSE;
 			GasValveStart:=FALSE;
@@ -183,7 +193,7 @@ IF ControlMode<>3 THEN
 				ControlState:=3;
 				AirValveSetPoint:=AirValveStartSP;
 			END_IF;
-		2:																				(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+		2:																				(*Калибровка газового клапана*)
 			IF GasRegValveCalibrateComplete THEN
 				GasRegInit:=TRUE;
 				IF AirValveCalibrateComplete THEN ControlState:=3; AirValveSetPoint:=AirValveStartSP; END_IF;
@@ -194,7 +204,7 @@ IF ControlMode<>3 THEN
 				GasRegValveSetPoint:=GasRegValveSPs[0];
 				ControlState:=4;
 			END_IF;
-		4:																				(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+		4:																				(*Продувка*)
 			ton1:=ton1+1;
 			IF ton1>=(StartDelayTime*10)-50 THEN
 				AirValveSetPoint:=	AirRegValveSPs[0];
@@ -202,12 +212,12 @@ IF ControlMode<>3 THEN
 			IF ton1>=(StartDelayTime*10) AND AirValveDone THEN
 				ControlState:=5;
 			END_IF;
-		5:																				(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+		5:																				(*Проверка клапанов*)
 			GasValveStart:=TRUE;
 			IF GasValveReady THEN
 				ControlState:=6;
 			END_IF;
-		6:																				(*пїЅпїЅпїЅпїЅпїЅпїЅ*)
+		6:																				(*Розжиг*)
 			 trans:=TRUE;
 			IF GasValveDone THEN
 				ton1:=ton1+1;
@@ -216,12 +226,12 @@ IF ControlMode<>3 THEN
 					ControlState:=7;
 				END_IF;
 			END_IF;
-		7:																				(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+		7:																				(*Стабилизация пламени*)
 			ton1:=ton1+1;
 			IF ton1>StabilizationDelayTime*10 THEN
 				ControlState:=8;
 			END_IF;
-		8:																				(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+		8:																				(*Регулирование*)
 			GasRegulatorStart:=TRUE;
 		10:
 			GasRegulatorStart:=FALSE;
@@ -248,7 +258,7 @@ IF ControlMode<>3 THEN
 				ControlState:=22;
 				AirValveSetPoint:=AirValveStartSP;
 			END_IF;
-		21:																				(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+		21:																				(*Калибровка воздушного клапана*)
 			IF AirValveCalibrateComplete THEN ControlState:=22; AirValveSetPoint:=AirValveStartSP; END_IF;
 		22:
 			FunStart:=TRUE;
@@ -256,7 +266,7 @@ IF ControlMode<>3 THEN
 				GasRegInit:=TRUE;
 				ControlState:=23;
 			END_IF;
-		23:																				(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+		23:																				(*Продувка*)
 			ton1:=ton1+1;
 			IF ton1>=(StartDelayTime*10)-50 THEN
 				AirValveSetPoint:=	AirValveOil0;
@@ -265,7 +275,7 @@ IF ControlMode<>3 THEN
 			IF ton1>=(StartDelayTime*10) AND AirValveDone THEN
 				ControlState:=24;
 			END_IF;
-		24:																				(*пїЅпїЅпїЅпїЅпїЅпїЅ*)
+		24:																				(*Розжиг*)
 			trans:=TRUE;
 			ton1:=ton1+1;
 			IF ton1=10 THEN  Valve1:=TRUE; END_IF;
@@ -273,12 +283,12 @@ IF ControlMode<>3 THEN
 				trans:=FALSE;
 				ControlState:=25;
 			END_IF;
-		25:																				(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+		25:																				(*Стабилизация пламени*)
 			ton1:=ton1+1;
 			IF ton1>StabilizationDelayTime*10 THEN
 				ControlState:=26;
 			END_IF;
-		26:																				(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+		26:																				(*Регулирование*)
 			CASE GasRegulatorSetPoint OF
 				0..30:
 					AirValveSetPoint:=AirValveOil1;
@@ -1058,7 +1068,7 @@ VAR
 	starting:BOOL;
 	kbrd_old:WORD;
 	trgr:BYTE;
-	mode:BYTE:=0;					(*0 - пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ; 1..4 - пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+	mode:BYTE:=0;					(*0 - индикация; 1..4 - изменение значений*)
 	tmp1:STRING;
 	tmp2:STRING;
 	tmp3:STRING;
@@ -1067,14 +1077,14 @@ VAR
 	ton1:INT;
 END_VAR
 (* @END_DECLARATION := '0' *)
-IF NOT starting THEN							(*пїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
-	Clear_Display(SINGLE_MODE);               (*пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ*)
-	Switch_To_Single_Mode();                       (*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ*)
+IF NOT starting THEN							(*то что выполняется один раз при запуске программы*)
+	Clear_Display(SINGLE_MODE);               (*очищаем экран*)
+	Switch_To_Single_Mode();                       (*переходим в монопольный режим*)
 	starting:=TRUE;
 	FaultReset:=TRUE;
 END_IF;
 
-(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+(*Инициализация клавиатуры*)
 key_f1:=kbrd.0;
 key_f2:=kbrd.1;
 key_f3:=kbrd.8;
@@ -1092,120 +1102,121 @@ ELSIF (scrn<160 OR scrn>=200) AND ControlMode=3 THEN
 	ControlMode:=ControlModeOld;
 END_IF;
 
-trgr.0:=kbrd<>kbrd_old;												(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ*)
+trgr.0:=kbrd<>kbrd_old;												(*нажатие клавиш*)
 kbrd_old:=kbrd;
 
-CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
+CASE scrn OF															(*выбор окон*)
 
-	0:																	(*пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+	0:																	(*окно состояния*)
 		CASE ControlState OF
 			0:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp1:='Отключена';
 			1..3:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp1:='Калибровка';
 			4:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp1:='Продувка';
 			5:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp1:='Проверка клапанов';
 			6:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp1:='Розжиг';
 			7:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp1:='Стабилизация';
 			8:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp1:='Регулирование';
 			10:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp1:='Останов';
 			20, 21:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ     пїЅ';
+				tmp1:='Калибровка     Д';
 			22, 23:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ      пїЅ';
+				tmp1:='Продувка      Д';
 			24:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅ         пїЅ';
+				tmp1:='Розжиг         Д';
 			25:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ   пїЅ';
+				tmp1:='Стабилизация   Д';
 			26:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ  пїЅ';
+				tmp1:='Регулирование  Д';
 		END_CASE;
 
 		CASE NumberMessage OF
 			0:
-				tmp2:='пїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Норма';
 			1:
-				tmp2:='пїЅпїЅ:пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='ЗГ:ош движения';
 			2:
-				tmp2:='пїЅпїЅ:пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='ЗГ:ош датчика';
 			3:
-				tmp2:='пїЅпїЅ:пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='ЗВ:ош движения';
 			4:
-				tmp2:='пїЅпїЅ:пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='ЗВ:ош датчика';
 			5:
-				tmp2:='пїЅпїЅпїЅ:пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Газ:ош датчика';
 			6:
-				tmp2:='пїЅпїЅпїЅ:пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Газ:ВВ давление';
 			7:
-				tmp2:='пїЅпїЅпїЅ/пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Газ/НН давление';
 			8:
-				tmp2:='пїЅпїЅпїЅ:пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Газ:В давление';
 			9:
-				tmp2:='пїЅпїЅпїЅ:пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Газ:Н давление';
 			10:
-				tmp2:='пїЅпїЅпїЅ:пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Взд:ош датчика';
 			11:
-				tmp2:='пїЅпїЅпїЅ:пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Взд:ВВ давление';
 			12:
-				tmp2:='пїЅпїЅпїЅ:пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Взд:НН давление';
 			13:
-				tmp2:='пїЅпїЅпїЅ:пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Взд:В давление';
 			14:
-				tmp2:='пїЅпїЅпїЅ:пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Взд:Н давление';
 			15:
-				tmp2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Горелка открыта';
 			16:
-				tmp2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ';
+				tmp2:='Посторонний свет';
 			17:
-				tmp2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Погасание пламен';
 			18:
-				tmp2:='пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Ош герметичности';
 			19:
-				tmp2:='пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp2:='Ош задания';
 		END_CASE;
-
-		IF NOT OilMode THEN
+(*Выбор режмов *)
+	(*	IF NOT OilMode THEN
 			IF ControlMode<>2 THEN
-				tmp3:='пїЅпїЅпїЅ=   %пїЅпїЅпїЅ=   %'; tmp4:=GasRegulatorSetPoint;
+				tmp3:='Газ=   %Мощ=   %'; tmp4:=GasRegulatorSetPoint;
 			ELSE
-				tmp3:='пїЅпїЅпїЅ=   %TEk=   '; tmp4:=REAL_TO_INT(HeatTemperature);
+				tmp3:='Газ=   %TEk=   '; tmp4:=REAL_TO_INT(HeatTemperature);
 			END_IF;
 			tmp4:=REAL_TO_INT(GasRegValve.CurrentPosition);
-		ELSE
+		ELSE *)
 			IF ControlMode<>2 THEN
-				tmp3:='пїЅпїЅпїЅ=   %пїЅпїЅпїЅ=   %'; tmp4:=GasRegulatorSetPoint;
+				tmp3:='Диз=   %Мощ=   %'; tmp4:=GasRegulatorSetPoint;
 			ELSE
-				tmp3:='пїЅпїЅпїЅ=   %TEk=   '; tmp4:=REAL_TO_INT(HeatTemperature);
+				tmp3:='Диз=   %TEk=   '; tmp4:=REAL_TO_INT(HeatTemperature);
 			END_IF;
 			IF Valve3 THEN tmp4:=100; ELSIF Valve2 THEN tmp4:=60; ELSIF Valve1 THEN tmp4:=40; ELSE tmp4:=0; END_IF;
-		END_IF;
+		(*END_IF; *)
 
 		IF mode<>0 THEN mode:=2; END_IF;
-		Screen(row1:= tmp1 , row2:=tmp3 , row3:='пїЅпїЅпїЅ=   %пїЅ=   0пїЅпїЅ', row4:=tmp2, sp1:=tmp4, sp2:=GasRegulatorSetPoint, sp3:= REAL_TO_INT(AirValve.CurrentPosition), sp4:=AirPressure/10, mode:=mode);
+		Screen(row1:= tmp1 , row2:=tmp3 , row3:='Взд=   %Р=   0Па', row4:=tmp2, sp1:=tmp4, sp2:=GasRegulatorSetPoint, sp3:= REAL_TO_INT(AirValve.CurrentPosition), sp4:=AirPressure/10, mode:=mode);
 		IF mode=2 AND trgr.0 THEN IF key_up THEN GasRegulatorSetPoint:=GasRegulatorSetPoint+1; ELSIF key_down THEN GasRegulatorSetPoint:=GasRegulatorSetPoint-1; END_IF; END_IF;
 
+	(**********Окна общих настроек**********)
 	100:
 		CASE ControlMode OF
 			0:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp1:='Удаленный';
 				IF mode=1 AND trgr.0 AND key_up THEN ControlMode:=ControlMode+1; END_IF;
 			1:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+				tmp1:='Местный';
 				IF mode=1 AND trgr.0 AND key_up THEN ControlMode:=ControlMode+1; END_IF;
 				IF mode=1 AND trgr.0 AND key_down THEN ControlMode:=ControlMode-1; END_IF;
 			2:
-				tmp1:='пїЅпїЅпїЅпїЅпїЅ';
+				tmp1:='Котел';
 				IF mode=1 AND trgr.0 AND key_down THEN ControlMode:=ControlMode-1; END_IF;
 		END_CASE;
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row3:=tmp1 , row4:='           пїЅпїЅпїЅпїЅпїЅ', mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='Выбор управления' , row3:=tmp1 , row4:='           режим', mode:=mode);
 	101:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=   %', sp1:=AirValveDeadBand, mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='Заслонка воздуха' , row3:='Диапазон' , row4:='отклонений=   %', sp1:=AirValveDeadBand, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN AirValveDeadBand:=AirValveDeadBand+1; ELSIF key_down THEN AirValveDeadBand:=AirValveDeadBand-1; END_IF;
@@ -1213,7 +1224,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 		END_IF;
 
 	102:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ=   пїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ =   пїЅ', sp1:=AirValveRunningTime, sp2:=AirValveFaultTime, mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='Заслонка воздуха' , row3:='Время хода=   с' , row4:='ВрОшибки =   с', sp1:=AirValveRunningTime, sp2:=AirValveFaultTime, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN AirValveRunningTime:=AirValveRunningTime+1; ELSIF key_down THEN AirValveRunningTime:=AirValveRunningTime-1; END_IF;
@@ -1222,7 +1233,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 		END_IF;
 
 	103:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅ (пїЅпїЅ)=   0 пїЅпїЅ' , row4:='пїЅ  (пїЅпїЅ)=   0 пїЅпїЅ', sp1:=FunPressureHH/10, sp2:=FunPressureH/10, mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='Давление воздуха' , row3:='ВВ (ав)=   0 Па' , row4:='В  (пр)=   0 Па', sp1:=FunPressureHH/10, sp2:=FunPressureH/10, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN FunPressureHH:=FunPressureHH+10; ELSIF key_down THEN FunPressureHH:=FunPressureHH-10; END_IF;
@@ -1230,7 +1241,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	104:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row3:='пїЅ  (пїЅпїЅ)=   0 пїЅпїЅ' , row4:='пїЅпїЅ (пїЅпїЅ)=   0 пїЅпїЅ', sp1:=FunPressureL/10, sp2:=FunPressureLL/10, mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='Давление воздуха' , row3:='Н  (пр)=   0 Па' , row4:='НН (ав)=   0 Па', sp1:=FunPressureL/10, sp2:=FunPressureLL/10, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN FunPressureL:=FunPressureL+10; ELSIF key_down THEN FunPressureL:=FunPressureL-10; END_IF;
@@ -1238,21 +1249,21 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	105:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=    пїЅ', sp1:=FunDelayTimeForCheking, mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='Давление воздуха' , row3:='Задержка на' , row4:='проверку=    с', sp1:=FunDelayTimeForCheking, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN FunDelayTimeForCheking:=FunDelayTimeForCheking+1; ELSIF key_down THEN FunDelayTimeForCheking:=FunDelayTimeForCheking-1; END_IF;
 			END_CASE;
 		END_IF;
 	106:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=   %', sp1:=GasRegValveDeadBand, mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='Заслонка газа' , row3:='Диапазон' , row4:='отклонений=   %', sp1:=GasRegValveDeadBand, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN GasRegValveDeadBand:=GasRegValveDeadBand+1; ELSIF key_down THEN GasRegValveDeadBand:=GasRegValveDeadBand-1; END_IF;
 			END_CASE;
 		END_IF;
 	107:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ=   пїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ =   пїЅ', sp1:=GasRegValveRunningTime, sp2:=GasRegValveFaultTime, mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='Заслонка газа' , row3:='Время хода=   с' , row4:='ВрОшибки =   с', sp1:=GasRegValveRunningTime, sp2:=GasRegValveFaultTime, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN GasRegValveRunningTime:=GasRegValveRunningTime+1; ELSIF key_down THEN GasRegValveRunningTime:=GasRegValveRunningTime-1; END_IF;
@@ -1260,7 +1271,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	108:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=   пїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=   пїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=   пїЅпїЅ', sp1:=REAL_TO_INT(HeatTemperature), sp2:=HeatTemperatureHH, sp3:=HeatTemperatureLL, mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='ТемпКотла=   Гр' , row3:='ДиапВерх=   Гр' , row4:='ДиапНиз=   Гр', sp1:=REAL_TO_INT(HeatTemperature), sp2:=HeatTemperatureHH, sp3:=HeatTemperatureLL, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	mode:=2;
@@ -1269,7 +1280,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	109:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=   пїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=   пїЅпїЅ' , row4:='пїЅпїЅ пїЅпїЅпїЅпїЅ=   пїЅпїЅ', sp1:=REAL_TO_INT(HeatTemperature), sp2:=HeatTemperatureSP,  sp3:=HeatTemperatureOff,  mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='ТемпКотла=   Гр' , row3:='Задание=   Гр' , row4:='ТЕ откл=   Гр', sp1:=REAL_TO_INT(HeatTemperature), sp2:=HeatTemperatureSP,  sp3:=HeatTemperatureOff,  mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	mode:=2;
@@ -1278,7 +1289,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	110:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=   пїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅ=   пїЅпїЅпїЅпїЅ=' , row4:='пїЅпїЅпїЅпїЅ=', sp1:=REAL_TO_INT(HeatTemperature), sp2:=HeaterTemperatureRegP, sp3:=HeaterTemperatureRegI, sp4:=HeaterTemperatureRegD,  mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='ТемпКотла=   Гр' , row3:='РегП=   РегИ=' , row4:='РегД=', sp1:=REAL_TO_INT(HeatTemperature), sp2:=HeaterTemperatureRegP, sp3:=HeaterTemperatureRegI, sp4:=HeaterTemperatureRegD,  mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	mode:=2;
@@ -1288,7 +1299,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	111:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ:пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅ =    %' , row4:='пїЅпїЅпїЅпїЅпїЅ =    пїЅ', sp1:=AirValveStartSP, sp2:=StartDelayTime, mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='Горелка:продувка' , row3:='Звзд =    %' , row4:='Время =    с', sp1:=AirValveStartSP, sp2:=StartDelayTime, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN AirValveStartSP:=AirValveStartSP+1; ELSIF key_down THEN AirValveStartSP:=AirValveStartSP-1; END_IF;
@@ -1296,7 +1307,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	112:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ:  пїЅпїЅпїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ =    пїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=    пїЅ', sp1:=IgnitionDelayTime, sp2:=StabilizationDelayTime, mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='Горелка:  розжиг' , row3:='ВрРозжига =    с' , row4:='ВрСтабил=    с', sp1:=IgnitionDelayTime, sp2:=StabilizationDelayTime, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN IgnitionDelayTime:=IgnitionDelayTime+1; ELSIF key_down THEN IgnitionDelayTime:=IgnitionDelayTime-1; END_IF;
@@ -1304,7 +1315,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	113:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ:пїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅ =    %' , row4:='пїЅпїЅпїЅпїЅпїЅ =    пїЅ', sp1:=AirValveStopSP, sp2:=StopDelayTime, mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='Горелка:останов' , row3:='Звзд =    %' , row4:='Время =    с', sp1:=AirValveStopSP, sp2:=StopDelayTime, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN AirValveStopSP:=AirValveStopSP+1; ELSIF key_down THEN AirValveStopSP:=AirValveStopSP-1; END_IF;
@@ -1312,9 +1323,9 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 
-	(**********пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ**********)
+	(**********Окна настроек контрольных точек**********)
 	130:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=    %' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=    %' , row4:='', sp1:=Air0, sp2:=Gas0, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='ВздРозжига=    %' , row3:='ГазРозжига=    %' , row4:='', sp1:=Air0, sp2:=Gas0, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air0:=Air0+1; ELSIF key_down THEN Air0:=Air0-1; END_IF;
@@ -1322,7 +1333,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	131:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅ 1 =    %' , row3:='пїЅпїЅпїЅ 1 =       %' , row4:='', sp1:=Air1, sp2:=Gas1, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 1 =    %' , row3:='Газ 1 =       %' , row4:='', sp1:=Air1, sp2:=Gas1, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air1:=Air1+1; ELSIF key_down THEN Air1:=Air1-1; END_IF;
@@ -1330,7 +1341,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	132:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅ 2 =    %' , row3:='пїЅпїЅпїЅ 2 =       %' , row4:='', sp1:=Air2, sp2:=Gas2, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 2 =    %' , row3:='Газ 2 =       %' , row4:='', sp1:=Air2, sp2:=Gas2, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air2:=Air2+1; ELSIF key_down THEN Air2:=Air2-1; END_IF;
@@ -1338,7 +1349,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	133:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅ 3 =    %' , row3:='пїЅпїЅпїЅ 3 =       %' , row4:='', sp1:=Air3, sp2:=Gas3, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 3 =    %' , row3:='Газ 3 =       %' , row4:='', sp1:=Air3, sp2:=Gas3, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air3:=Air3+1; ELSIF key_down THEN Air3:=Air3-1; END_IF;
@@ -1346,7 +1357,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	134:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅ 4 =    %' , row3:='пїЅпїЅпїЅ 4 =       %' , row4:='', sp1:=Air4, sp2:=Gas4, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 4 =    %' , row3:='Газ 4 =       %' , row4:='', sp1:=Air4, sp2:=Gas4, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air4:=Air4+1; ELSIF key_down THEN Air4:=Air4-1; END_IF;
@@ -1354,7 +1365,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	135:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅ 5 =    %' , row3:='пїЅпїЅпїЅ 5 =       %' , row4:='', sp1:=Air5, sp2:=Gas5, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 5 =    %' , row3:='Газ 5 =       %' , row4:='', sp1:=Air5, sp2:=Gas5, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air5:=Air5+1; ELSIF key_down THEN Air5:=Air5-1; END_IF;
@@ -1362,7 +1373,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	136:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅ 6 =    %' , row3:='пїЅпїЅпїЅ 6 =       %' , row4:='', sp1:=Air6, sp2:=Gas6, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 6 =    %' , row3:='Газ 6 =       %' , row4:='', sp1:=Air6, sp2:=Gas6, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air6:=Air6+1; ELSIF key_down THEN Air6:=Air6-1; END_IF;
@@ -1370,7 +1381,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	137:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅ 7 =    %' , row3:='пїЅпїЅпїЅ 7 =       %' , row4:='', sp1:=Air7, sp2:=Gas7, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 7 =    %' , row3:='Газ 7 =       %' , row4:='', sp1:=Air7, sp2:=Gas7, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air7:=Air7+1; ELSIF key_down THEN Air7:=Air7-1; END_IF;
@@ -1378,7 +1389,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	138:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅ 8 =    %' , row3:='пїЅпїЅпїЅ 8 =       %' , row4:='', sp1:=Air8, sp2:=Gas8, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 8 =    %' , row3:='Газ 8 =       %' , row4:='', sp1:=Air8, sp2:=Gas8, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air8:=Air8+1; ELSIF key_down THEN Air8:=Air8-1; END_IF;
@@ -1386,7 +1397,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	139:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅ 9 =    %' , row3:='пїЅпїЅпїЅ 9 =       %' , row4:='', sp1:=Air9, sp2:=Gas9, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 9 =    %' , row3:='Газ 9 =       %' , row4:='', sp1:=Air9, sp2:=Gas9, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air9:=Air9+1; ELSIF key_down THEN Air9:=Air9-1; END_IF;
@@ -1394,7 +1405,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	140:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅ10 =    %' , row3:='пїЅпїЅпїЅ10 =       %' , row4:='', sp1:=Air10, sp2:=Gas10, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух10 =    %' , row3:='Газ10 =       %' , row4:='', sp1:=Air10, sp2:=Gas10, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air10:=Air10+1; ELSIF key_down THEN Air10:=Air10-1; END_IF;
@@ -1403,22 +1414,22 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 		END_IF;
 	141:
 		IF NOT GasRegulatorServiceMode THEN
-			tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+			tmp1:='Деактивирован';
 			IF mode=1 AND trgr.0 AND key_up THEN GasRegulatorServiceMode:=TRUE; END_IF;
 		ELSE
-			tmp1:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ';
+			tmp1:='Активирован';
 			IF mode=1 AND trgr.0 AND key_down THEN GasRegulatorServiceMode:=FALSE; END_IF;
 		END_IF;
-		Screen(row1:= '#пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ' , row2:=tmp1 , row3:= '' , row4:='', mode:=mode);
+		Screen(row1:= '#Сервисный режим' , row2:=tmp1 , row3:= '' , row4:='', mode:=mode);
 	142:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅпїЅпїЅ =    пїЅ' , row3:='' , row4:='', sp1:=GasRegulatorChangingTime, mode:=mode);
+		Screen(row1:= 'ВремяРегулирован' , row2:='ВрРег =    с' , row3:='' , row4:='', sp1:=GasRegulatorChangingTime, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN GasRegulatorChangingTime:=GasRegulatorChangingTime+1; ELSIF key_down AND GasRegulatorChangingTime>0 THEN GasRegulatorChangingTime:=GasRegulatorChangingTime-1; END_IF;
 			END_CASE;
 		END_IF;
 	143:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅ0 =    %' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅ1 =    %', sp1:=AirValveOil0, sp2:=AirValveOil1, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Диз топливо' , row3:='Воздух0 =    %' , row4:='Воздух1 =    %', sp1:=AirValveOil0, sp2:=AirValveOil1, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN AirValveOil0:=AirValveOil0+1; ELSIF key_down THEN AirValveOil0:=AirValveOil0-1; END_IF;
@@ -1426,7 +1437,7 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 	144:
-		Screen(row1:= 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row2:='пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅ2 =    %' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅ3 =    %', sp1:=AirValveOil2, sp2:=AirValveOil3, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Диз топливо' , row3:='Воздух2 =    %' , row4:='Воздух3 =    %', sp1:=AirValveOil2, sp2:=AirValveOil3, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN AirValveOil2:=AirValveOil2+1; ELSIF key_down THEN AirValveOil2:=AirValveOil2-1; END_IF;
@@ -1434,80 +1445,72 @@ CASE scrn OF															(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
 			END_CASE;
 		END_IF;
 
-
-
-	(**********пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ**********)
+	(**********Окна сервисного режима**********)
 	160:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', sp1:= PowerSP, mode:=mode);
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Задание мощности' , row4:='Значение=', sp1:= PowerSP, mode:=mode);
 	161:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅ=    0 пїЅпїЅ', sp1:= AirPressure/10, mode:=mode);
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Давление воздуха' , row4:='Знач=    0 Па', sp1:= AirPressure/10, mode:=mode);
 	162:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅ=', sp1:=BOOL_TO_INT(GasIncomingPressureMax), mode:=mode);
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Реле газа вход' , row4:='Знач=', sp1:=BOOL_TO_INT(GasIncomingPressureMax), mode:=mode);
 	163:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(Trans));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Трансформатор' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Trans));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN Trans:=TRUE; ELSIF key_down THEN Trans:=FALSE; END_IF; END_IF;
 	164:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= CurrentPower);
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Текущая мощность' , row4:='Задание=', mode:= mode, sp1:= CurrentPower);
 		IF mode=1 AND trgr.0 THEN IF key_up THEN CurrentPower:=CurrentPower+1; ELSIF key_down THEN CurrentPower:=CurrentPower-1; END_IF; END_IF;
 	165:
-		(*Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='' , row4:='пїЅпїЅпїЅ=    пїЅпїЅ=', mode:= mode, sp1:= AirValveSet, sp2:= AirValveFB);
-		IF mode=1 AND trgr.0 THEN IF key_up THEN AirValveSet:=AirValveSet+1; ELSIF key_down THEN AirValveSet:=AirValveSet-1; END_IF;  END_IF;*)
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='/-/ R=     Om /+/', mode:= mode, sp1:= AirValveFB);
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Заслонка воздуха' , row4:='/-/ R=     Om /+/', mode:= mode, sp1:= AirValveFB);
 		IF mode=1 AND trgr.0 THEN AirRegUp:=key_up; AirRegDown:=key_down; END_IF;
 	166:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(LimitSwitch));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Концевик' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(LimitSwitch));
 	167:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(Start));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Сигнал запуска' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(Start));
 	168:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅ1' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(GasValve1));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ПЗК1' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValve1));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValve1:=TRUE; ELSIF key_down THEN GasValve1:=FALSE; END_IF; END_IF;
 	169:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅ2' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(GasValve2));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ПЗК2' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValve2));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValve2:=TRUE; ELSIF key_down THEN GasValve2:=FALSE; END_IF; END_IF;
 	170:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='/-/ R=     Om /+/', mode:= mode, sp1:= GasRegValveFB);
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Газовая заслонка' , row4:='/-/ R=     Om /+/', mode:= mode, sp1:= GasRegValveFB);
 		IF mode=1 AND trgr.0 THEN GasRegUp:=key_up; GasRegDown:=key_down; END_IF;
 	171:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(Run));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Сигнал работа' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Run));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN Run:=TRUE; ELSIF key_down THEN Run:=FALSE; END_IF; END_IF;
 	172:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(Alarm));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Сигнал авария' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Alarm));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN Alarm:=TRUE; ELSIF key_down THEN Alarm:=FALSE; END_IF; END_IF;
 	173:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(FunSet));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Пуск вентилятора' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(FunSet));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN FunSet:=TRUE; ELSIF key_down THEN FunSet:=FALSE; END_IF; END_IF;
 	174:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(RunLed));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Индикатор Работа' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(RunLed));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN RunLed:=TRUE; ELSIF key_down THEN RunLed:=FALSE; END_IF; END_IF;
 	175:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(AlarmLed));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Индикатор Авария' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(AlarmLed));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN AlarmLed:=TRUE; ELSIF key_down THEN AlarmLed:=FALSE; END_IF; END_IF;
 	176:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅ-пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(GasValveIgnition));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Кл-н запальника' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValveIgnition));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValveIgnition:=TRUE; ELSIF key_down THEN GasValveIgnition:=FALSE; END_IF; END_IF;
 	177:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ-пїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(GasSafetyPressureMax));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Реле герм-ности' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(GasSafetyPressureMax));
 	178:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅ-пїЅ пїЅпїЅпїЅпїЅпїЅ-пїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(GasValveSafety));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Кл-н безоп-ти' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValveSafety));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValveSafety:=TRUE; ELSIF key_down THEN GasValveSafety:=FALSE; END_IF; END_IF;
 	179:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(Pump));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='НасосТоплива' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Pump));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN Pump:=TRUE; ELSIF key_down THEN Pump:=FALSE; END_IF; END_IF;
 	180:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ1' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(Valve1));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ДизКлапан1' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Valve1));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN Valve1:=TRUE; ELSIF key_down THEN Valve1:=FALSE; END_IF; END_IF;
 	181:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ2' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(Valve2));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ДизКлапан2' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Valve2));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN Valve2:=TRUE; ELSIF key_down THEN Valve2:=FALSE; END_IF; END_IF;
 	182:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ3' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(Valve3));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ДизКлапан3' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Valve3));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN Valve3:=TRUE; ELSIF key_down THEN Valve3:=FALSE; END_IF; END_IF;
 	183:
-		Screen(row1:= '   !пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ!' , row2:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ' , row3:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ' , row4:='пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ=', mode:= mode, sp1:= BOOL_TO_INT(OilMode));
-
-
-
-
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ВыборДизТоплива' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(OilMode));
 
 END_CASE;
 
@@ -1533,9 +1536,9 @@ GasValveStop:=ControlMode=3;
 GasRegulatorStop:=ControlMode=3;
 
 IF mode=0 AND trgr.0 THEN
-	IF key_f1 THEN														(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ*)
+	IF key_f1 THEN														(*переход в главное окно*)
 		scrn:=0;
-	ELSIF key_f2 THEN													(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+	ELSIF key_f2 THEN													(*переход в окно настроек*)
 		CASE scrn OF
 			100..129:	IF key_alt AND ControlState=0 THEN scrn:=160; ELSIF NOT key_alt THEN scrn:=130; END_IF;
 			130..159:	IF key_alt AND ControlState=0 THEN scrn:=160; ELSIF NOT key_alt THEN scrn:=100; END_IF;
@@ -1613,7 +1616,7 @@ VAR_INPUT
 END_VAR
 
 VAR_IN_OUT
-	mode:BYTE;					(*0 - пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ; 1..4 - пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+	mode:BYTE;					(*0 - индикация; 1..4 - изменение значений*)
 END_VAR
 
 VAR
@@ -1622,7 +1625,7 @@ VAR
 	row3_old:STRING;
 	row4_old:STRING;
 	i: INT;
-	j:BYTE;								(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ (пїЅпїЅ 1 пїЅпїЅпїЅпїЅпїЅпїЅ)*)
+	j:BYTE;								(*количество переменных (на 1 больше)*)
 	a:ARRAY[1..4] OF INT;
 	str:ARRAY[1..4] OF STRING;
 	tmp1:STRING;
@@ -1844,34 +1847,34 @@ END_PROGRAM
 (* @SYMFILEFLAGS := '2048' *)
 PROGRAM Periphery
 VAR
-	COM_SERVICE1: COM_SERVICE;	   (*пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ*)
-	port_opened:  BYTE := 0;				(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ*)
-	Settings:COMSETTINGS;				(* пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ *)
+	COM_SERVICE1: COM_SERVICE;	   (*ФБ открытия порта*)
+	port_opened:  BYTE := 0;				(*состояние порта*)
+	Settings:COMSETTINGS;				(* настройки последовательного порта *)
       	com_num: PORTS:=1;				(*0 - RS-485, 1 - RS-232*)
-	send2_modbus: MB_WR_REGS;         (*пїЅпїЅпїЅпїЅпїЅпїЅпїЅ 16 - пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
-	get1_modbus: MB_RD_HOLD_REGS;    (*пїЅпїЅпїЅпїЅпїЅпїЅпїЅ 03 - пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ INT*)
-	Buffer: ARRAY[0..255] OF BYTE;		(* пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ *)
+	send2_modbus: MB_WR_REGS;         (*функция 16 - запись параметров*)
+	get1_modbus: MB_RD_HOLD_REGS;    (*функция 03 - чтение параметра типа INT*)
+	Buffer: ARRAY[0..255] OF BYTE;		(* байтовый буфер данных *)
      	cmpl: BOOL;
-	Init: BOOL;								(* пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ *)
-	enabl: BOOL;							(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ*)
-	err: INT;								(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ*)
-	TimeOut: TIME:=T#100ms;				(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+	Init: BOOL;								(* признак инициализации пользовательской программы *)
+	enabl: BOOL;							(*состояние работы блока*)
+	err: INT;								(*номер ошибки*)
+	TimeOut: TIME:=T#100ms;				(*таймаут*)
 	Exception: BYTE;
 	DataSize: WORD;
 	master1: BYTE:= 1;
-	t: DWORD;						(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
-	A: WORD := 0;					(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
-	x:WORD;						(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
-	x1: WORD;						(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅ*)
-	x2: WORD;						(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅ*)
-	x3: WORD;						(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅ*)
-	d:  REAL;						(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
+	t: DWORD;						(*переменная для организации счетчика*)
+	A: WORD := 0;					(*счетчик*)
+	x:WORD;						(*считанное значение*)
+	x1: WORD;						(*переменная для записи по сети*)
+	x2: WORD;						(*переменная для записи по сети*)
+	x3: WORD;						(*переменная для записи по сети*)
+	d:  REAL;						(*считанное значение*)
 	ptr_D:POINTER TO BYTE;
 	Modbus_prph:INT;
 
 END_VAR
 (* @END_DECLARATION := '0' *)
-(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ COM-пїЅпїЅпїЅпїЅпїЅ*)
+(*Устанавливаем настройки COM-порта*)
 IF port_opened=0 THEN
 		Settings.Port:=com_num;
 		Settings.dwBaudRate:=9600;
@@ -1899,10 +1902,10 @@ Modbus_prph.12:=AirRegUp;
 Modbus_prph.13:=AirRegDown;
 Modbus_prph.14:=RunLed;
 Modbus_prph.15:=AlarmLed;
-Modbus_prph.6:=Pump;(*пїЅпїЅпїЅпїЅпїЅ*)
-Modbus_prph.8:=Valve3;(*пїЅпїЅ3*)
-Modbus_prph.9:=Valve2;(*пїЅпїЅ2*)
-Modbus_prph.10:=Valve1;(*пїЅпїЅ1*)
+Modbus_prph.6:=Pump;(*насос*)
+Modbus_prph.8:=Valve3;(*ст3*)
+Modbus_prph.9:=Valve2;(*ст2*)
+Modbus_prph.10:=Valve1;(*ст1*)
 
 LimitSwitch:=LimitSwitch_prph;
 Start:=Start_prph;
@@ -1929,18 +1932,18 @@ IF COM_SERVICE1.ready THEN
 	Buffer[1] := DINT_TO_BYTE(Modbus_prph);
 	Buffer[0] := DINT_TO_BYTE( SHR(Modbus_prph,8));
 	send2_modbus(
-		Enable:= TRUE,			(* пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ *)
-		Mode:=MB_RTU ,		(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
-		DevAddr:=16 , 				(*пїЅпїЅпїЅпїЅпїЅ*)
-		FirstAddr:= 50, 				(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
-		Quantity:= 1,   				(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ*)
-		ComHandle:=Settings.Port ,(*пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ-пїЅпїЅпїЅпїЅпїЅ*)
-		TimeOut:=TimeOut ,		(*пїЅпїЅпїЅпїЅпїЅпїЅпїЅ T#50ms*)
-		Buffer:=Buffer ,			(* пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ *)
-		Complete=>cmpl ,		(* пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ *)
-		Exception=>err ,			(* пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ *)
-		RegCnt=> DataSize);		(*пїЅпїЅпїЅ-пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ *)
-	(*пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅ *)
+		Enable:= TRUE,			(* разрешение работы блока *)
+		Mode:=MB_RTU ,		(*режим передачи*)
+		DevAddr:=16 , 				(*адрес*)
+		FirstAddr:= 50, 				(*номер регистра*)
+		Quantity:= 1,   				(*количество записываемых регистров*)
+		ComHandle:=Settings.Port ,(*номер сом-порта*)
+		TimeOut:=TimeOut ,		(*таймаут T#50ms*)
+		Buffer:=Buffer ,			(* буфер данных *)
+		Complete=>cmpl ,		(* скопировать признак завершения операции *)
+		Exception=>err ,			(* скопировать регистр ошибок *)
+		RegCnt=> DataSize);		(*кол-во считанных байтов *)
+	(*если установлен признак завершения операции, то *)
 END_IF
 IF port_opened<>2 AND port_opened<>0 THEN port_opened:=0; END_IF;
 
@@ -2135,3 +2138,1173 @@ IF FaultReset THEN FaultReset:=FALSE; END_IF;
 
 END_IF;
 END_PROGRAM
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @GLOBAL_VARIABLE_LIST := 'Global_Variables' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+VAR_GLOBAL
+	GasRegValve: DriverGasRegValve;
+	AirValve: DriverGasRegValve;
+	Fun:DriverFun;
+	GasValve: DriverGasValve;
+	GasRegulator: DriverGasRegulator;
+	Messages: DriverMessage;
+	Burner: DriverBurner;
+	FlameSensor:DriverFlameSensor;
+	BoilerControl:DriverBoiler;
+	Trans:BOOL;
+	CurrentPower:INT;
+	LimitSwitch:BOOL;
+	Start:BOOL;
+	AirValveFB:INT;
+	GasRegValveFB:INT;
+	PowerSP:INT;
+	AirPressure:INT;
+	GasPressure:INT;
+	GasValve1:BOOL;
+	GasValve2:BOOL;
+	GasRegUp:BOOL;
+	GasRegDown:BOOL;
+	Run:BOOL;
+	Alarm:BOOL;
+	RunLed:BOOL;
+	AlarmLed:BOOL;
+	StartCmnd:BOOL;
+	FaultReset:BOOL; (* сброс неисправности*)
+	ControlState: INT;  (* контроль *)
+	Alarms:DWORD;
+	GasRegValveSetPoint: REAL;  (*установка точек*)
+	GasRegValveCurrentPosition: REAL;  (*тякущая позиция*)
+	GasRegValveError: BYTE;
+	GasRegValveCalibrateEnable: BOOL;  (*калибровка*)
+	GasRegValveStop: BOOL;
+	AirValveSetPoint: REAL;
+	AirValveStop: BOOL;
+	AirValveSet: INT;
+	AirValveError: BYTE;
+	FunStart: BOOL;
+	FunStop: BOOL;
+	FunSet: BOOL;
+	FunWarning: BYTE;
+	FunError: BYTE;
+	GasValveStart: BOOL;
+	GasValveStop: BOOL;
+	GasValveWarning: BYTE;
+	GasValveError: BYTE;
+	GasValveDone: BOOL;
+	AirValveDone: BOOL;
+	GasRegulatorStart: BOOL;
+	GasRegulatorStop: BOOL;
+	GasRegInit: BOOL;
+	GasRegulatorChanging: BOOL;
+	GasRegulatorDone: BOOL;
+	scrn: INT:=0;
+	key_f1: BOOL;
+	key_f2: BOOL;
+	key_f3: BOOL;
+	key_start: BOOL;
+	key_alt: BOOL;
+	key_exit: BOOL;
+	key_up: BOOL;
+	key_down: BOOL;
+	key_enter: BOOL;
+	Health: BOOL;
+	NumberMessage: BYTE;
+	BurnerErrors: BYTE;
+	GasValveSafety: BOOL;
+	GasValveIgnition: BOOL;
+	AirRegUp: BOOL;
+	AirRegDown: BOOL;
+	AirValveCalibrateEnable: BOOL;
+	AirValveCurrentPosition: REAL;
+	FlameSensorMode: BYTE;
+	FlameSensorState: BOOL;
+	FlameSensorSim: BOOL;
+	GasRegValveSPs: ARRAY [0..10] OF INT;
+	AirRegValveSPs: ARRAY [0..10] OF INT;
+	GasValveReady: BOOL;
+	GasRegulatorServiceMode: BOOL;
+	HeatTemperature: REAL;
+	HeaterTemperatureAutoSetting:BOOL;
+
+	Valve3: BOOL;
+	Valve2: BOOL;
+	Valve1: BOOL;
+	Pump: BOOL;
+END_VAR
+
+VAR_GLOBAL RETAIN
+
+	ControlMode: BYTE;
+	GasRegValveDeadBand: INT:=2;
+	GasRegValveFeedBackMax: INT:=75;
+	GasRegValveFeedBackMin: INT:=935;
+	GasRegValveChangingSpeed: REAL:=25;
+	GasRegValveCalibrateComplete: BOOL;
+	GasRegValveRunningTime: BYTE:=36;
+	GasRegValveFaultTime: BYTE := 10;
+	AirValveDiscrepancy: INT := 2;
+	AirValveFaultTime: BYTE := 80;
+	AirValveSetPointMax: INT := 100;
+	AirValveSetPointMin: INT := 0;
+	FunPressureHH: INT := 3100;
+	FunPressureH: INT := 1700;
+	FunPressureL: INT := 500;
+	FunPressureLL: INT := -100;
+	FunPressureMax: INT;
+	FunPressureMin: INT;
+	FunDelayTimeForCheking: INT := 30;
+	GasValvePressureHH: INT := 15000;
+	GasValvePressureH: INT := 14000;
+	GasValvePressureL: INT := -25;
+	GasValvePressureLL: INT := -30;
+	GasValveDelayTime:BYTE := 5;
+	GasValvePressureMax: INT;
+	GasValvePressureMin: INT;
+	AirValveStartSP: INT := 75;
+	StartDelayTime: INT := 30;
+
+	IgnitionDelayTime: INT := 4;
+	StabilizationDelayTime: INT := 10;
+	GasRegulatorChangeTime: INT := 10;
+	GasRegulatorSetPoint: INT := 20;
+	GasRegulatorGasMax: INT;
+	GasRegulatorSetPointMin: INT;
+	AirValveStopSP: INT := 75;
+	StopDelayTime: INT := 30;
+	GasRegulatorChangeTimeSPs: ARRAY [0..9] OF INT;
+
+	Air0:INT:=5; Gas0:INT:=17;
+	Air1:INT:=3; Gas1:INT:=17;
+	Air2:INT:=8; Gas2:INT:=23;
+	Air3:INT:=20; Gas3:INT:=30;
+	Air4:INT:=29; Gas4:INT:=39;
+	Air5:INT:=36; Gas5:INT:=46;
+	Air6:INT:=41; Gas6:INT:=63;
+	Air7:INT:=48; Gas7:INT:=68;
+	Air8:INT:=50; Gas8:INT:=75;
+	Air9:INT:=50; Gas9:INT:=75;
+	Air10:INT:=50; Gas10:INT:=75;
+
+	AirValveDeadBand: INT := 1;
+	AirValveGain: REAL := 2.0;
+	AirValveRunningTime: BYTE := 36;
+	AirValveFeedBackMax: INT := 940;
+	AirValveFeedBackMin: INT := 70;
+	AirValveChangingSpeed: REAL := 250;
+	AirValveCalibrateComplete: BOOL;
+
+	FlameSensorCheckingTime: BYTE := 5;
+	GasRegValveGain: REAL := 2.0;
+	GasValveIgnitionDelay: BYTE := 5;
+	GasValveIgnitionTime: BYTE := 10;
+	GasRegulatorChangingTime: INT := 60;
+
+	HeatTemperatureHH: INT := 180;
+	HeatTemperatureLL: INT := -50;
+	HeatTemperatureSP: INT := 60;
+	HeaterTemperatureRegP:INT:=30;
+	HeaterTemperatureRegI:INT:=30;
+	HeaterTemperatureRegD:INT:=10;
+	HeaterTemperatureRegDB: REAL := 1.0;
+	HeaterTemperatureRegTOF: INT := 3000;
+	HeatTemperatureOff: INT := 80;
+
+	AirValveOil0: INT := 15;
+	AirValveOil3: INT := 45;
+	AirValveOil2: INT := 25;
+	AirValveOil1: INT := 17;
+
+END_VAR
+(* @OBJECT_END := 'Global_Variables' *)
+(* @CONNECTIONS := Global_Variables
+FILENAME : ''
+FILETIME : 0
+EXPORT : 0
+NUMOFCONNECTIONS : 0
+*)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @GLOBAL_VARIABLE_LIST := 'Variable_Configuration' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+VAR_CONFIG
+END_VAR
+
+(* @OBJECT_END := 'Variable_Configuration' *)
+(* @CONNECTIONS := Variable_Configuration
+FILENAME : ''
+FILETIME : 0
+EXPORT : 0
+NUMOFCONNECTIONS : 0
+*)
+
+PLC_CONFIGURATION
+_GLOBAL
+_VERSION: 3
+_AUTOADR: 1
+_CHECKADR: 1
+_SAVECONFIGFILESINPROJECT: 0
+_END_GLOBAL
+
+_MODULE: '3S'
+_SECTION_NAME: 'Root'
+_INDEX_IN_PARENT: '-1'
+_MODULE_NAME: 'PLC73'
+_NODE_ID: -1
+_IECIN: %IB0
+_IECOUT: %QB0
+_IECDIAG: %MB0
+_DOWNLOAD: 1
+_EXCLUDEFROMAUTOADR: 0
+_COMMENT: ''
+
+_PARAMETER
+_PARAM 1: 0, '#NМеню ПЛК73#A0'
+_PARAM 2: 0, '1'
+_PARAM 3: 0, '1000'
+_END_PARAMETER
+
+_MODULE: '3S'
+_SECTION_NAME: 'ID10050'
+_INDEX_IN_PARENT: '1'
+_MODULE_NAME: 'Configuration'
+_NODE_ID: 0
+_IECIN: %IB0
+_IECOUT: %QB0
+_IECDIAG: %MB0
+_DOWNLOAD: 1
+_EXCLUDEFROMAUTOADR: 0
+_COMMENT: ''
+
+_PARAMETER
+_PARAM 1: 0, '#NКонфигурация#A0'
+_END_PARAMETER
+
+_MODULE: '3S'
+_SECTION_NAME: 'ID10051'
+_INDEX_IN_PARENT: '1'
+_MODULE_NAME: 'DInputs'
+_NODE_ID: 0
+_IECIN: %IB0.0
+_IECOUT: %QB0.0
+_IECDIAG: %MB0.0
+_DOWNLOAD: 1
+_EXCLUDEFROMAUTOADR: 0
+_COMMENT: ''
+
+_PARAMETER
+_PARAM 1: 0, '#NДискретные Вх.#A0#E'
+_END_PARAMETER
+
+_CHANNEL
+_SECTION_NAME: 'DInput'
+_INDEX_IN_PARENT: '1'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Битовая маска входов'
+_CHANNEL_MODE: 'I'
+_IECADR: %IB0.0.0
+
+_PARAMETER
+_PARAM 1: 0, '#NСост.Дискр.Вх.#Fr.Cn#H2D26#A3#T02#O#B0120#V2'
+_PARAM 2: 0, '#NЛогика Дискр.Вх#Finv.D#H62C2#A2#T02#D00#MFF#B0121#V2#E'
+_PARAM 3: 0, '#NПост.Ф.ДребКонт#FTin.F#HF89F#A2#U0017#T02#D00#MFF#B0122#E'
+_END_PARAMETER
+_BIT 0: %IX0.0.0.0 'FlameSensor_prph' 'Bit 0'
+_BIT 1: %IX0.0.0.1 'LimitSwitch_prph' 'Bit 1'
+_BIT 2: %IX0.0.0.2 'PassOilonInput_p' 'Bit 2'
+_BIT 3: %IX0.0.0.3 'Start_Stop_Burner_p' 'Bit 3'
+_BIT 4: %IX0.0.0.4 'Pass_Air_p' 'Bit 4'
+_BIT 5: %IX0.0.0.5 'Off_Burner_p' 'Bit 5'
+_BIT 6: %IX0.0.0.6 '' 'Bit 6'
+_BIT 7: %IX0.0.0.7 'Protecrion_ofBoiler_p' 'Bit 7'
+_END_CHANNEL
+_END_MODULE
+
+_MODULE: '3S'
+_SECTION_NAME: 'ID10057'
+_INDEX_IN_PARENT: '2'
+_MODULE_NAME: 'Outputs'
+_NODE_ID: 1
+_IECIN: %IB0.1
+_IECOUT: %QB0.1
+_IECDIAG: %MB0.1
+_DOWNLOAD: 1
+_EXCLUDEFROMAUTOADR: 0
+_COMMENT: ''
+
+_PARAMETER
+_PARAM 1: 0, '#NВУ#A0#E'
+_END_PARAMETER
+
+_CHANNEL
+_SECTION_NAME: 'AnalogOutput0'
+_INDEX_IN_PARENT: '1'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Выход 1'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QD0.1.0
+
+_PARAMETER
+_PARAM 1: 0, '#NСост.ВУ1#Fr.oe#HE894#I00#A0#T00#C3#M+1.00E+00#O#B0000'
+_PARAM 2: 0, '#NПериод ШИМ ВУ1#Fthpd#I00#B0123#A0#U0017#T01#D03E8#L0002#MFDE8'
+_PARAM 3: 0, '#NМин.имп.ШИМ ВУ1#Ft.L#I00#B012B#A0#U0017#T01#D0032#L0001#M1388'
+_PARAM 4: 0, '#NБезоп.сост.ВУ1#FO.ALr#I00#B0010#A0#C3#T00#D+0.00E+00#M+1.00E+00'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogOutput1'
+_INDEX_IN_PARENT: '2'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Выход 2'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QD0.1.1
+
+_PARAMETER
+_PARAM 1: 0, '#NСост.ВУ2#Fr.oe#HE894#I01#A0#T00#C3#M+1.00E+00#O#B0002'
+_PARAM 2: 0, '#NПериод ШИМ ВУ2#Fthpd#I01#B0124#A0#U0017#T01#D03E8#L0002#MFDE8'
+_PARAM 3: 0, '#NМин.имп.ШИМ ВУ2#Ft.L#I01#B012C#A0#U0017#T01#D0032#L0001#M1388'
+_PARAM 4: 0, '#NБезоп.сост.ВУ2#FO.ALr#I01#B0012#A0#C3#T00#D+0.00E+00#M+1.00E+00'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogOutput2'
+_INDEX_IN_PARENT: '3'
+_SYMBOLIC_NAME: 'FlameSensorBeat_prph'
+_COMMENT: 'Выход 3'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QD0.1.2
+
+_PARAMETER
+_PARAM 1: 0, '#NСост.ВУ3#Fr.oe#HE894#I02#A1#T00#C3#M+1.00E+00#O#B0004'
+_PARAM 2: 0, '#NПериод ШИМ ВУ3#Fthpd#H7BFE#I02#A3#U0017#T01#D03E8#MFDE8#L0002#B0125#E'
+_PARAM 3: 0, '#NМин.имп.ШИМ ВУ3#Ft.L#H07AA#I02#A2#U0017#T01#D0032#M1388#L0001#B012D#E'
+_PARAM 4: 0, '#NБезоп.сост.ВУ3#FO.ALr#HDC64#I02#A3#T00#C3#D+0.00E+00#M+1.00E+00#B0014#E'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogOutput3'
+_INDEX_IN_PARENT: '4'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Выход 4'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QD0.1.3
+
+_PARAMETER
+_PARAM 1: 0, '#NСост.ВУ4#Fr.oe#HE894#I03#A0#T00#C3#M+1.00E+00#O#B0006'
+_PARAM 2: 0, '#NПериод ШИМ ВУ4#Fthpd#I03#B0126#A0#U0017#T01#D03E8#L0002#MFDE8'
+_PARAM 3: 0, '#NМин.имп.ШИМ ВУ4#Ft.L#I03#B012E#A0#U0017#T01#D0032#L0001#M1388'
+_PARAM 4: 0, '#NБезоп.сост.ВУ4#FO.ALr#I03#B0016#A0#C3#T00#D+0.00E+00#M+1.00E+00'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogOutput4'
+_INDEX_IN_PARENT: '5'
+_SYMBOLIC_NAME: 'Trans_prph'
+_COMMENT: 'Выход 5'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QD0.1.4
+
+_PARAMETER
+_PARAM 1: 0, '#NСост.ВУ5#Fr.oe#HE894#I04#A1#T00#C1#M+1.00E+00#O#B0008'
+_PARAM 2: 0, '#NПериод ШИМ ВУ5#Fthpd#H7BFE#I04#A2#U0017#T01#D03E8#MFDE8#L0002#B0127#E'
+_PARAM 3: 0, '#NМин.имп.ШИМ ВУ5#Ft.L#H07AA#I04#A2#U0017#T01#D0032#M1388#L0001#B012F#E'
+_PARAM 4: 0, '#NБезоп.сост.ВУ5#FO.ALr#HDC64#I04#A2#T00#C3#D+0.00E+00#M+1.00E+00#B0018#E'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogOutput5'
+_INDEX_IN_PARENT: '6'
+_SYMBOLIC_NAME: 'AirValve_prph'
+_COMMENT: 'Выход 6'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QD0.1.5
+
+_PARAMETER
+_PARAM 1: 0, '#NСост.ВУ6#Fr.oe#HE894#I05#A0#T00#C3#M+1.00E+00#O#B000A'
+_PARAM 2: 0, '#NПериод ШИМ ВУ6#Fthpd#I05#B0128#A0#U0017#T01#D03E8#L0002#MFDE8'
+_PARAM 3: 0, '#NМин.имп.ШИМ ВУ6#Ft.L#I05#A0#B0130#U0017#T01#D0032#L0001#M1388'
+_PARAM 4: 0, '#NБезоп.сост.ВУ6#FO.ALr#I05#B001A#A0#C3#T00#D+0.00E+00#M+1.00E+00'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogOutput6'
+_INDEX_IN_PARENT: '7'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Выход 7'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QD0.1.6
+
+_PARAMETER
+_PARAM 1: 0, '#NСост.ВУ7#Fr.oe#HE894#I06#A1#T00#C2#M+1.00E+00#O#B000C'
+_PARAM 2: 0, '#NПериод ШИМ ВУ7#Fthpd#H7BFE#I06#A2#U0017#T01#D03E8#MFDE8#L0002#B0129#E'
+_PARAM 3: 0, '#NМин.имп.ШИМ ВУ7#Ft.L#H07AA#I06#A2#U0017#T01#D0032#M1388#L0001#B0131#E'
+_PARAM 4: 0, '#NБезоп.сост.ВУ7#FO.ALr#HDC64#I06#A2#T00#C3#D+0.00E+00#M+1.00E+00#B001C#E'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogOutput7'
+_INDEX_IN_PARENT: '8'
+_SYMBOLIC_NAME: 'CurrentPower_prph'
+_COMMENT: 'Выход 8'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QD0.1.7
+
+_PARAMETER
+_PARAM 1: 0, '#NСост.ВУ8#Fr.oe#HE894#I07#A1#T00#C3#M+1.00E+00#O#B000E'
+_PARAM 2: 0, '#NПериод ШИМ ВУ8#Fthpd#H7BFE#I07#A2#U0017#T01#D03E8#MFDE8#L0002#B012A#E'
+_PARAM 3: 0, '#NМин.имп.ШИМ ВУ8#Ft.L#H07AA#I07#A2#U0017#T01#D0032#M1388#L0001#B0132#E'
+_PARAM 4: 0, '#NБезоп.сост.ВУ8#FO.ALr#HDC64#I07#A2#T00#C3#D+0.00E+00#M+1.00E+00#B001E#E'
+_END_PARAMETER
+_END_CHANNEL
+_END_MODULE
+
+_MODULE: '3S'
+_SECTION_NAME: 'ID10055'
+_INDEX_IN_PARENT: '3'
+_MODULE_NAME: 'AInputs'
+_NODE_ID: 2
+_IECIN: %IB0.2
+_IECOUT: %QB0.2
+_IECDIAG: %MB0.2
+_DOWNLOAD: 1
+_EXCLUDEFROMAUTOADR: 0
+_COMMENT: ''
+
+_PARAMETER
+_PARAM 1: 0, '#NАналоговые Вх.#A0#E'
+_PARAM 2: 0, '#NКоррекция ХС#Fcj-.c#HFA68#A2#U002A#T03#D00#B0133#E'
+_END_PARAMETER
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInput0'
+_INDEX_IN_PARENT: '1'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Аналоговый вход 1'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.0
+
+_PARAMETER
+_PARAM 1: 0, '#NВход 1#Fread#H8784#I00#A3#T10#C1#O#B0020'
+_PARAM 2: 0, '#NТип датчика 1#Fin-t#H932D#I00#A2#U002F#T04#D00#M15#B0134#E'
+_PARAM 3: 0, '#NПост. фильтра 1#Fin.Fd#H1659#I00#A0#U0018#T01#D0005#M0708#B013C#E'
+_PARAM 4: 0, '#NПолоса Фильтра1#Fin.FG#H340A#I00#A2#T00#C1#D+1.00E+01#M+9.99E+03#B0030#E'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInputTime0'
+_INDEX_IN_PARENT: '2'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Время измерения 1'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.1
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInput1'
+_INDEX_IN_PARENT: '3'
+_SYMBOLIC_NAME: 'AirValveFB_prph'
+_COMMENT: 'Аналоговый вход 2'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.2
+
+_PARAMETER
+_PARAM 1: 0, '#NВход 2#Fread#H8784#I01#A3#T10#C1#O#B0022'
+_PARAM 2: 0, '#NТип датчика 2#Fin-t#H932D#I01#A2#U002F#T04#D15#M15#B0135#E'
+_PARAM 3: 0, '#NПост. фильтра 2#Fin.Fd#H1659#I01#A2#U0018#T01#D0000#M0000#B013D#E'
+_PARAM 4: 0, '#NПолоса Фильтра2#Fin.FG#H340A#I01#A2#T00#C1#D+0.00E+00#M+0.00E+00#B0032#E'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInputTime1'
+_INDEX_IN_PARENT: '4'
+_SYMBOLIC_NAME: 'AirValveFB_prphBeat'
+_COMMENT: 'Время измерения 2'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.3
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInput2'
+_INDEX_IN_PARENT: '5'
+_SYMBOLIC_NAME: 'GasRegValveFB_prph'
+_COMMENT: 'Аналоговый вход 3'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.4
+
+_PARAMETER
+_PARAM 1: 0, '#NВход 3#Fread#H8784#I02#A3#T10#C1#O#B0024'
+_PARAM 2: 0, '#NТип датчика 3#Fin-t#H932D#I02#A3#U002F#T04#D15#M15#B0136#E'
+_PARAM 3: 0, '#NПост. фильтра 3#Fin.Fd#H1659#I02#A2#U0018#T01#D0000#M0000#B013E#E'
+_PARAM 4: 0, '#NПолоса Фильтра3#Fin.FG#H340A#I02#A2#T00#C1#D+0.00E+00#M+0.00E+00#B0034#E'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInputTime2'
+_INDEX_IN_PARENT: '6'
+_SYMBOLIC_NAME: 'GasRegValveFB_prphBeat'
+_COMMENT: 'Время измерения 3'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.5
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInput3'
+_INDEX_IN_PARENT: '7'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Аналоговый вход 4'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.6
+
+_PARAMETER
+_PARAM 1: 0, '#NВход 4#Fread#H8784#I03#A3#T10#C2#O#B0026#V3'
+_PARAM 2: 0, '#NТип датчика 4#Fin-t#I03#B0137#A0#U002F#T04#D01#M15'
+_PARAM 3: 0, '#NПост. фильтра 4#Fin.Fd#I03#B013F#A0#U0018#T01#D0005#M0708'
+_PARAM 4: 0, '#NПолоса Фильтра4#Fin.FG#I03#A0#B0036#T00#D+1.00E+01#L+0.00E+01#M+9.99E+03'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInputTime3'
+_INDEX_IN_PARENT: '8'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Время измерения 4'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.7
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInput4'
+_INDEX_IN_PARENT: '9'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Аналоговый вход 5'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.8
+
+_PARAMETER
+_PARAM 1: 0, '#NВход 5#Fread#H8784#I04#A3#T10#C2#O#B0028#V3'
+_PARAM 2: 0, '#NТип датчика 5#Fin-t#I04#B0138#A0#U002F#T04#D01#M15'
+_PARAM 3: 0, '#NПост. фильтра 5#Fin.Fd#I04#B0140#A0#U0018#T01#D0005#M0708'
+_PARAM 4: 0, '#NПолоса Фильтра5#Fin.FG#I04#B0038#A0#T00#D+1.00E+01#L+0.00E+01#M+9.99E+03'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInputTime4'
+_INDEX_IN_PARENT: '10'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Время измерения 5'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.9
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInput5'
+_INDEX_IN_PARENT: '11'
+_SYMBOLIC_NAME: 'PowerSP_prph'
+_COMMENT: 'Аналоговый вход 6'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.10
+
+_PARAMETER
+_PARAM 1: 0, '#NВход 6#Fread#H8784#I05#A3#T10#C2#O#B002A'
+_PARAM 2: 0, '#NТип датчика 6#Fin-t#H932D#I05#A2#U002F#T04#D10#M15#B0139#E'
+_PARAM 3: 0, '#NПост. фильтра 6#Fin.Fd#H1659#I05#A2#U0018#T01#D0005#M0708#B0141#E'
+_PARAM 4: 0, '#NПолоса Фильтра6#Fin.FG#H340A#I05#A0#T00#C1#D+1.00E+01#M+9.99E+03#B003A#E'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInputTime5'
+_INDEX_IN_PARENT: '12'
+_SYMBOLIC_NAME: 'PowerSP_prphBeat'
+_COMMENT: 'Время измерения 6'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.11
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInput6'
+_INDEX_IN_PARENT: '13'
+_SYMBOLIC_NAME: 'AirPressure_prph'
+_COMMENT: 'Аналоговый вход 7'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.12
+
+_PARAMETER
+_PARAM 1: 0, '#NВход 7#Fread#H8784#I06#A3#T10#C2#O#B002C#V3'
+_PARAM 2: 0, '#NТип датчика 7#Fin-t#H932D#I06#A2#U002F#T04#D10#M15#B013A#E'
+_PARAM 3: 0, '#NПост. фильтра 7#Fin.Fd#H1659#I06#A0#U0018#T01#D0000#M0708#B0142#E'
+_PARAM 4: 0, '#NПолоса Фильтра7#Fin.FG#H340A#I06#A2#T00#C1#D+0.00E+00#M+9.99E+03#B003C#E'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInputTime6'
+_INDEX_IN_PARENT: '14'
+_SYMBOLIC_NAME: 'AirPressure_prphBeat'
+_COMMENT: 'Время измерения 7'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.13
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInput7'
+_INDEX_IN_PARENT: '15'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Аналоговый вход 8'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.14
+
+_PARAMETER
+_PARAM 1: 0, '#NВход 8#Fread#H8784#I07#A3#T10#C2#O#B002E#V3'
+_PARAM 2: 0, '#NТип датчика 8#Fin-t#H932D#I07#A2#U002F#T04#D10#M15#B013B#E'
+_PARAM 3: 0, '#NПост. фильтра 8#Fin.Fd#H1659#I07#A2#U0018#T01#D0005#M0708#B0143#E'
+_PARAM 4: 0, '#NПолоса Фильтра8#Fin.FG#I07#B003E#A0#T00#D+1.00E+01#L+0.00E+01#M+9.99E+03'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'AnalogInputTime7'
+_INDEX_IN_PARENT: '16'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Время измерения 8'
+_CHANNEL_MODE: 'I'
+_IECADR: %ID0.2.15
+_END_CHANNEL
+_END_MODULE
+
+_MODULE: '3S'
+_SECTION_NAME: 'ID10053'
+_INDEX_IN_PARENT: '4'
+_MODULE_NAME: 'MR1_Outputs'
+_NODE_ID: 3
+_IECIN: %IB0.3
+_IECOUT: %QB0.3
+_IECDIAG: %MB0.3
+_DOWNLOAD: 1
+_EXCLUDEFROMAUTOADR: 0
+_COMMENT: ''
+
+_PARAMETER
+_PARAM 1: 0, '#NВУ МР1#A0'
+_END_PARAMETER
+
+_CHANNEL
+_SECTION_NAME: 'DOutput'
+_INDEX_IN_PARENT: '1'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'ВУ МР1'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QB0.3.0
+
+_PARAMETER
+_PARAM 1: 0, '#NСост.ВУ МР1#Fr.oe.s#HA9F4#A0#T02#O#B0144#V2'
+_END_PARAMETER
+_BIT 0: %QX0.3.0.0 '' 'Bit 0'
+_BIT 1: %QX0.3.0.1 '' 'Bit 1'
+_BIT 2: %QX0.3.0.2 '' 'Bit 2'
+_BIT 3: %QX0.3.0.3 '' 'Bit 3'
+_BIT 4: %QX0.3.0.4 '' 'Bit 4'
+_BIT 5: %QX0.3.0.5 '' 'Bit 5'
+_BIT 6: %QX0.3.0.6 '' 'Bit 6'
+_BIT 7: %QX0.3.0.7 '' 'Bit 7'
+_END_CHANNEL
+_END_MODULE
+
+_MODULE: '3S'
+_SECTION_NAME: 'ID10059'
+_INDEX_IN_PARENT: '5'
+_MODULE_NAME: 'Additional'
+_NODE_ID: 4
+_IECIN: %IB0.4
+_IECOUT: %QB0.4
+_IECDIAG: %MB0.4
+_DOWNLOAD: 1
+_EXCLUDEFROMAUTOADR: 0
+_COMMENT: ''
+
+_PARAMETER
+_PARAM 1: 0, '#NДоп.пар-ры#A0'
+_END_PARAMETER
+
+_CHANNEL
+_SECTION_NAME: 'LCDLight'
+_INDEX_IN_PARENT: '1'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Подсветка'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QB0.4.0
+
+_PARAMETER
+_PARAM 1: 0, '#NЯрк.подсв.ЖКИ#Find.i#B0145#A0#T02#D2D#M32'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'LCDContrast'
+_INDEX_IN_PARENT: '2'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Контраст'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QB0.4.1
+
+_PARAMETER
+_PARAM 1: 0, '#NКонтраст ЖКИ#Find.C#B0146#A0#T02#D19#L05#M20'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'KBD'
+_INDEX_IN_PARENT: '3'
+_SYMBOLIC_NAME: 'kbrd'
+_COMMENT: 'Клавиатура'
+_CHANNEL_MODE: 'I'
+_IECADR: %IW0.4.2
+
+_PARAMETER
+_PARAM 1: 0, '#NСост.клавиатуры#Fkbrd#H399B#A3#T02#O#B0147'
+_PARAM 2: 0, '#NЗвук кнопок#Fbeep#HF1E6#A0#U002A#T03#D01#B0148'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'RTS'
+_INDEX_IN_PARENT: '4'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Часы контроллера'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QD0.4.3
+
+_PARAMETER
+_PARAM 1: 0, '#NВремя и дата#FrtC#HFA30#A0#T05#O#B0040'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'LED'
+_INDEX_IN_PARENT: '5'
+_SYMBOLIC_NAME: 'lds_prph'
+_COMMENT: 'Светодиоды'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QB0.4.4
+
+_PARAMETER
+_PARAM 1: 0, '#NСос.светодиодов#Find.L#HF304#A1#T02#D00#M3F#L00#O#B0149#V2'
+_END_PARAMETER
+_END_CHANNEL
+_END_MODULE
+
+_MODULE: '3S'
+_SECTION_NAME: 'ID10060'
+_INDEX_IN_PARENT: '6'
+_MODULE_NAME: 'Versions'
+_NODE_ID: 5
+_IECIN: %IB0.5
+_IECOUT: %QB0.5
+_IECDIAG: %MB0.5
+_DOWNLOAD: 1
+_EXCLUDEFROMAUTOADR: 0
+_COMMENT: ''
+
+_PARAMETER
+_PARAM 1: 0, '#NВерсииПрошивок#A0'
+_END_PARAMETER
+
+_CHANNEL
+_SECTION_NAME: 'DevName'
+_INDEX_IN_PARENT: '1'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Имя устройства'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QB0.5.0
+
+_PARAMETER
+_PARAM 1: 0, '#NИмя устройства#Fdev#B0042#A3#O#T08'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'HardVer'
+_INDEX_IN_PARENT: '2'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Прошивка'
+_CHANNEL_MODE: 'I'
+_IECADR: %IB0.5.1
+
+_PARAMETER
+_PARAM 1: 0, '#NВерсия прошивки#Fver#B004A#A3#O#T08'
+_END_PARAMETER
+_END_CHANNEL
+
+_CHANNEL
+_SECTION_NAME: 'SoftVer'
+_INDEX_IN_PARENT: '3'
+_SYMBOLIC_NAME: ''
+_COMMENT: 'Программа'
+_CHANNEL_MODE: 'Q'
+_IECADR: %QB0.5.2
+
+_PARAMETER
+_PARAM 1: 0, '#NВерсияПрограммы#Fp.ver#B0052#A3#O#T08'
+_END_PARAMETER
+_END_CHANNEL
+_END_MODULE
+
+_MODULE: '3S'
+_SECTION_NAME: 'ID10061'
+_INDEX_IN_PARENT: '7'
+_MODULE_NAME: 'RS-1'
+_NODE_ID: 6
+_IECIN: %IB0.6
+_IECOUT: %QB0.6
+_IECDIAG: %MB0.6
+_DOWNLOAD: 1
+_EXCLUDEFROMAUTOADR: 0
+_COMMENT: ''
+
+_PARAMETER
+_PARAM 1: 0, '#NНастр.RS-1#A0'
+_PARAM 2: 0, '#NСкорость#FbPS#I00#B014A#A0#U0046#T04#D00#M09'
+_PARAM 3: 0, '#NДлина слова#FLen#I00#B014B#A0#U0005#T04#D03#M03'
+_PARAM 4: 0, '#NЧётность#Fprty#I00#B014C#A0#U009A#T04#D04#M04'
+_PARAM 5: 0, '#NСтоп биты#Fsbit#I00#B014D#A0#U00A1#T04#D00#M02'
+_PARAM 6: 0, '#NДлина адреса#Fa.len#I00#B014E#A0#U0055#T03#D00'
+_PARAM 7: 0, '#NАдрес прибора#FAddr#I00#B014F#A0#T01#D0010#M07FF'
+_PARAM 8: 0, '#NЗадержка ответа#FRs.dl#I00#B0150#A0#U0017#T02#D05#M32'
+_END_PARAMETER
+_END_MODULE
+
+_MODULE: '3S'
+_SECTION_NAME: 'ID10062'
+_INDEX_IN_PARENT: '8'
+_MODULE_NAME: 'RS-2'
+_NODE_ID: 7
+_IECIN: %IB0.7
+_IECOUT: %QB0.7
+_IECDIAG: %MB0.7
+_DOWNLOAD: 1
+_EXCLUDEFROMAUTOADR: 0
+_COMMENT: ''
+
+_PARAMETER
+_PARAM 1: 0, '#NНастр.RS-2#A0'
+_PARAM 2: 0, '#NСкорость#FbPS#I01#B0151#A0#U0046#T04#D00#M09'
+_PARAM 3: 0, '#NДлина слова#FLen#I01#B0152#A0#U0005#T04#D03#M03'
+_PARAM 4: 0, '#NЧётность#Fprty#I01#B0153#A0#U009A#T04#D04#M04'
+_PARAM 5: 0, '#NСтоп биты#Fsbit#I01#B0154#A0#U00A1#T04#D00#M02'
+_PARAM 6: 0, '#NДлина адреса#Fa.len#I01#B0155#A0#U0055#T03#D00'
+_PARAM 7: 0, '#NАдрес прибора#FAddr#I01#B0156#A0#T01#D0010#M07FF'
+_PARAM 8: 0, '#NЗадержка ответа#FRs.dl#I01#B0157#A0#U0017#T02#D05#M32'
+_END_PARAMETER
+_END_MODULE
+_END_MODULE
+
+_MODULE: '3S'
+_SECTION_NAME: 'ID10100'
+_INDEX_IN_PARENT: '2'
+_MODULE_NAME: 'WorkInd'
+_NODE_ID: 1
+_IECIN: %IB1
+_IECOUT: %QB1
+_IECDIAG: %MB1
+_DOWNLOAD: 1
+_EXCLUDEFROMAUTOADR: 0
+_COMMENT: ''
+
+_PARAMETER
+_PARAM 1: 0, '6'
+_END_PARAMETER
+_END_MODULE
+
+_MODULE: '3S'
+_SECTION_NAME: 'ID11000'
+_INDEX_IN_PARENT: '3'
+_MODULE_NAME: 'SubMenu'
+_NODE_ID: 2
+_IECIN: %IB2
+_IECOUT: %QB2
+_IECDIAG: %MB2
+_DOWNLOAD: 1
+_EXCLUDEFROMAUTOADR: 0
+_COMMENT: ''
+
+_PARAMETER
+_PARAM 1: 0, '#NВетка#A0'
+_END_PARAMETER
+_END_MODULE
+
+_MODULE: '3S'
+_SECTION_NAME: 'ID11000'
+_INDEX_IN_PARENT: '4'
+_MODULE_NAME: 'SubMenu'
+_NODE_ID: 3
+_IECIN: %IB3
+_IECOUT: %QB3
+_IECDIAG: %MB3
+_DOWNLOAD: 1
+_EXCLUDEFROMAUTOADR: 0
+_COMMENT: ''
+
+_PARAMETER
+_PARAM 1: 0, '#NВетка#A0'
+_END_PARAMETER
+_END_MODULE
+
+_MODULE: '3S'
+_SECTION_NAME: 'ID11000'
+_INDEX_IN_PARENT: '5'
+_MODULE_NAME: 'SubMenu'
+_NODE_ID: 4
+_IECIN: %IB4
+_IECOUT: %QB4
+_IECDIAG: %MB4
+_DOWNLOAD: 1
+_EXCLUDEFROMAUTOADR: 0
+_COMMENT: ''
+
+_PARAMETER
+_PARAM 1: 0, '#NВетка#A0'
+_END_PARAMETER
+_END_MODULE
+_END_MODULE
+PLC_END
+
+
+RESOURCE
+
+TASK Cycle01 (PRIORITY := 1, INTERVAL := T#200ms);
+Periphery();
+HMI();
+{Additional_info : 1,0,0,0,1,4294967295}
+END_TASK
+
+TASK Cycle (PRIORITY := 1, INTERVAL := T#100ms);
+PLC_PRG();
+{Additional_info : 1,0,0,0,1,4294967295}
+END_TASK
+
+END_RESOURCE
+
+
+_ALARMCONFIG
+_ALARMCONFIGNEXTTEXTID : 10002
+_ALARMCONFIGFORMATS : 'HH$':$'mm$':$'ss','dd$'-$'MM$'-$'yyyy'
+_ALARMCLASSLIST : 1
+_ALARMCLASSID : 0
+_ALARMCLASSACKTYPE : 0
+_ALARMCLASSNAME : 'DEFAULT'
+_ALARMCLASSDESCRIPTION : ''
+_ALARMCLASSBGCOLORS : 16777215,16777215,16777215
+_ALARMCLASSTEXTCOLORS : 3394560,255,16711680
+_ALARMCLASSBITMAPS : '','',''
+_ALARMACTIONLIST : 0
+(* @ALARMCLASSRESETCOLORS := '_ALARMCLASSRESETCOLORS: 33023,16777215' *)
+(* @ALARMCLASSRESETBITMAP := '_ALARMCLASSRESETBITMAP: $'$'' *)
+_ALARMGROUPLISTNAME : 'Система'
+_ALARMGROUPPATH : 'Система'
+_ALARMGROUPLIST : 0
+_VISUALSETTINGSFLAGS : 0,0,0,0
+_VISUALSETTINGSFLAGS : '','',''
+_VISUALSETTINGSDYNTEXTFILECOUNT : 0
+
+(* @ALARMCONFIGFLAGS := '_ALARMCONFIGFLAGS: 4' *)
+(* @ALARMCONFIGGLOBALDB_STR := '_ALARMCONFIGGLOBALDB_STRINGS: $'$',$'$',$'$',$'$'' *)
+(* @ALARMCONFIGGLOBALDB_NUM := '_ALARMCONFIGGLOBALDB_NUMBERS: 0,0' *)
+_END_ALARMCONFIG
+
+
+LIBRARY
+ANALYZATION.LIB 5.10.99 09:05:06
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 2
+AnalyzeExpression: 0
+AppendErrorString: 0
+NumOfGVLs: 1
+Globale_Variablen: 0
+END_LIBRARY
+
+LIBRARY
+Arm7_Specific.lib 27.1.21 18:16:15
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 4
+GetOutputType: 2048
+READ_BY_HASH: 2048
+SAVE_PAR_ATTRIB: 2048
+SAVE_PARAMETER: 2048
+NumOfGVLs: 1
+Global_Variables: 2048
+END_LIBRARY
+
+LIBRARY
+ComService.lib 28.8.19 16:10:12
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 1
+COM_SERVICE: 2048
+NumOfGVLs: 1
+Global_Variables: 2048
+END_LIBRARY
+
+LIBRARY
+IECSFC.LIB 13.4.06 15:51:28
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 1
+SFCActionControl: 0
+NumOfGVLs: 1
+Globale_Variablen: 0
+END_LIBRARY
+
+LIBRARY
+Ind_Mode.lib 24.6.19 13:58:36
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 7
+Clear_Display: 2048
+Get_Display_Mode: 2048
+ReadDisplay: 2048
+SWITCH_TO_EDITOR: 2048
+Switch_To_PREV_Mode: 2048
+Switch_To_Single_Mode: 2048
+Write_Display: 2048
+NumOfGVLs: 1
+Global_Variables: 2048
+END_LIBRARY
+
+LIBRARY
+ModBus.lib 24.6.19 13:53:20
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 17
+MB_ASCII_RX: 2048
+MB_ASCII_TX: 2048
+MB_CRC: 2048
+MB_ENC_CHAR: 2048
+MB_LCR: 2048
+MB_MOVED: 2048
+MB_MOVER: 2048
+MB_RD_COILS: 2048
+MB_RD_HOLD_REGS: 2048
+MB_RD_INP_REGS: 2048
+MB_RD_INPUTS: 2048
+MB_RTU_RX: 2048
+MB_UNI_IO: 2048
+MB_WR_COILS: 2048
+MB_WR_REGS: 2048
+MB_WR_SNG_COIL: 2048
+MB_WR_SNG_REG: 2048
+NumOfGVLs: 1
+Global_Variables: 2048
+END_LIBRARY
+
+LIBRARY
+Owen_FB.lib 27.1.21 18:16:46
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 6
+DECODE_FLOAT: 2048
+DIG_FLTR: 2048
+DWORD_TO_POINT: 2048
+ON_OFF_HIST_REG: 2048
+POINT_TO_DWORD: 2048
+STD_PID: 2048
+NumOfGVLs: 1
+Global_Variables: 2048
+END_LIBRARY
+
+LIBRARY
+STANDARD.LIB 4.10.05 11:14:46
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 21
+CONCAT: 0
+CTD: 0
+CTU: 0
+CTUD: 0
+DELETE: 0
+F_TRIG: 0
+FIND: 0
+INSERT: 0
+LEFT: 0
+LEN: 0
+MID: 0
+R_TRIG: 0
+REPLACE: 0
+RIGHT: 0
+RS: 0
+RTC: 0
+SEMA: 0
+SR: 0
+TOF: 0
+TON: 0
+TP: 0
+NumOfGVLs: 0
+END_LIBRARY
+
+LIBRARY
+SysLibCom.lib 27.6.19 01:00:16
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 7
+SysComClose: 0
+SysComGetVersion2300: 0
+SysComOpen: 0
+SysComRead: 0
+SysComSetSettings: 0
+SysComSetSettingsEx: 0
+SysComWrite: 0
+NumOfGVLs: 1
+Globale_Variablen: 0
+END_LIBRARY
+
+LIBRARY
+SYSLIBTIME.LIB 20.2.06 12:31:16
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 2
+CurTime: 0
+CurTimeEx: 0
+NumOfGVLs: 1
+Globale_Variablen: 0
+END_LIBRARY
+
+LIBRARY
+SYSTASKINFO.LIB 20.2.06 12:31:38
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 1
+taskinfo: 0
+NumOfGVLs: 1
+Globale_Variablen: 0
+END_LIBRARY
+
+LIBRARY
+Work_Mode.lib 24.6.19 13:58:44
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 8
+ClearScreen: 2048
+GetWorkScreen: 2048
+GetWorkScreenCount: 2048
+SetWorkScreen: 2048
+SetWorkScreenCount: 2048
+ShowDint: 2048
+ShowReal: 2048
+ShowString: 2048
+NumOfGVLs: 1
+Global_Variables: 2048
+END_LIBRARY
+
+
+_WORKSPACE
+_GLOBALVISUALSETTINGS
+_VISUALSETTINGSFLAGS : 0,0,0,0
+_VISUALSETTINGSFLAGS : '','',''
+_VISUALSETTINGSDYNTEXTFILECOUNT : 0
+_VISUALBITMAPLISTCOUNT : 0
+_END_GLOBALVISUALSETTINGS
+_END_WORKSPACE
