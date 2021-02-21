@@ -1466,11 +1466,11 @@ CASE scrn OF															(*выбор окон*)
 	167:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Сигнал запуска' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(Start));
 	168:
-		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ПЗК1' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValve1));
-		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValve1:=TRUE; ELSIF key_down THEN GasValve1:=FALSE; END_IF; END_IF;
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ПЗК1' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(bOut_PZK1));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN bOut_PZK1:=TRUE; ELSIF key_down THEN bOut_PZK1:=FALSE; END_IF; END_IF;
 	169:
-		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ПЗК2' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValve2));
-		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValve2:=TRUE; ELSIF key_down THEN GasValve2:=FALSE; END_IF; END_IF;
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ПЗК2' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(bOut_PZK2));
+		IF mode=1 AND trgr.0 THEN IF key_up THEN bOut_PZK2:=TRUE; ELSIF key_down THEN bOut_PZK2:=FALSE; END_IF; END_IF;
 	170:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Газовая заслонка' , row4:='/-/ R=     Om /+/', mode:= mode, sp1:= GasRegValveFB);
 		IF mode=1 AND trgr.0 THEN GasRegUp:=key_up; GasRegDown:=key_down; END_IF;
@@ -1497,9 +1497,9 @@ CASE scrn OF															(*выбор окон*)
 	178:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Кл-н безоп-ти' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValveSafety));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValveSafety:=TRUE; ELSIF key_down THEN GasValveSafety:=FALSE; END_IF; END_IF;
-	179:
+	(*179:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='НасосТоплива' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Pump));
-		IF mode=1 AND trgr.0 THEN IF key_up THEN Pump:=TRUE; ELSIF key_down THEN Pump:=FALSE; END_IF; END_IF;
+		IF mode=1 AND trgr.0 THEN IF key_up THEN Pump:=TRUE; ELSIF key_down THEN Pump:=FALSE; END_IF; END_IF; *)
 	180:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ДизКлапан1' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Valve1));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN Valve1:=TRUE; ELSIF key_down THEN Valve1:=FALSE; END_IF; END_IF;
@@ -1889,23 +1889,27 @@ COM_SERVICE1(Enable:=(port_opened=0) , Settings:=Settings , Task:=OPEN_TSK  );
 Trans_prph:=BOOL_TO_REAL(Trans);
 (*CurrentPower_prph:=CurrentPower; *)
 (*AirValve_prph:=INT_TO_REAL(AirValveSet)/100.0; *)
-Modbus_prph.0:=GasValve1;
-Modbus_prph.1:=GasValve2;
-Modbus_prph.2:=GasValveSafety;
-Modbus_prph.3:=GasValveIgnition;
-Modbus_prph.4:=GasRegUp;
-Modbus_prph.5:=GasRegDown;
-(*Modbus_prph.8:=Run;
-Modbus_prph.9:=Alarm;*)
-Modbus_prph.11:=FunSet;
-Modbus_prph.12:=AirRegUp;
-Modbus_prph.13:=AirRegDown;
+
+(*Запись в модуль*)
+Modbus_prph.0:= bOut_PZK1;
+Modbus_prph.1:= bOut_PZK2;
+Modbus_prph.2:= bOut_Air_more;
+Modbus_prph.3:=bOut_Air_less;
+Modbus_prph.4:=GasRegUp; (*Неиспользуется*)
+Modbus_prph.5:=GasRegDown; (*Неиспользуется*)
+Modbus_prph.6:=Pump;(*насос*) (*Неиспользуется*)
+Modbus_prph.7:=Valve3;(*ст3*)  (*Неиспользуется*)
+Modbus_prph.8:=Valve3;(*ст3*)  (*Неиспользуется*)
+Modbus_prph.9:=Valve2;(*ст2*)  (*Неиспользуется*)
+Modbus_prph.10:=Valve1;(*ст1*)  (*Неиспользуется*)
+Modbus_prph.11:=FunSet; (*Запуск вентилятора*)
+Modbus_prph.12:= FALSE;  (*Неиспользуется*)
+Modbus_prph.13:= FALSE;  (*Неиспользуется*)
 Modbus_prph.14:=RunLed;
 Modbus_prph.15:=AlarmLed;
-Modbus_prph.6:=Pump;(*насос*)
-Modbus_prph.8:=Valve3;(*ст3*)
-Modbus_prph.9:=Valve2;(*ст2*)
-Modbus_prph.10:=Valve1;(*ст1*)
+
+(*Modbus_prph.8:=Run;
+Modbus_prph.9:=Alarm;*)
 
 LimitSwitch:=LimitSwitch_prph;
 Start:=bStart_Stop_Burner; (*Запуск с поля*)
@@ -1920,17 +1924,12 @@ END_IF;
 (*AirPressure:=REAL_TO_INT (AirPressure_prph*40.0); *)
 
 
-
-
-
-
-
-
 IF COM_SERVICE1.ready THEN
 	port_opened:=2;
 
 	Buffer[1] := DINT_TO_BYTE(Modbus_prph);
 	Buffer[0] := DINT_TO_BYTE( SHR(Modbus_prph,8));
+
 	send2_modbus(
 		Enable:= TRUE,			(* разрешение работы блока *)
 		Mode:=MB_RTU ,		(*режим передачи*)
@@ -2011,8 +2010,8 @@ AirValve(
 	FeedBackMin:=AirValveFeedBackMin,
 	ChangingSpeed:=AirValveChangingSpeed,
 	CalibrateComplete:=AirValveCalibrateComplete,
-	SetUp:=AirRegUp,
-	SetDown:=AirRegDown,
+	SetUp:= AirRegUp ,
+	SetDown:=  AirRegDown ,
 	Done=>AirValveDone,
 	CurrentPosition=>,
 	Error=>AirValveError);
@@ -2047,8 +2046,8 @@ GasValve( (*??*)
 	Reset:=FaultReset,
 	PressureMax:=GasValvePressureMax,
 	PressureMin:=GasValvePressureMin,
-	Valve1:=GasValve1,
-	Valve2:=GasValve2,
+	Valve1:=bOut_PZK1,
+	Valve2:=bOut_PZK2,
 	ValveSafety:=GasValveSafety,
 	ValveIgnition:=GasValveIgnition,
 	Done=>GasValveDone,
