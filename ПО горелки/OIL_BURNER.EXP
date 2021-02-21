@@ -1887,8 +1887,8 @@ END_IF
 COM_SERVICE1(Enable:=(port_opened=0) , Settings:=Settings , Task:=OPEN_TSK  );
 
 Trans_prph:=BOOL_TO_REAL(Trans);
-CurrentPower_prph:=CurrentPower;
-AirValve_prph:=INT_TO_REAL(AirValveSet)/100.0;
+(*CurrentPower_prph:=CurrentPower; *)
+(*AirValve_prph:=INT_TO_REAL(AirValveSet)/100.0; *)
 Modbus_prph.0:=GasValve1;
 Modbus_prph.1:=GasValve2;
 Modbus_prph.2:=GasValveSafety;
@@ -1910,14 +1910,14 @@ Modbus_prph.10:=Valve1;(*ст1*)
 LimitSwitch:=LimitSwitch_prph;
 Start:=bStart_Stop_Burner; (*Запуск с поля*)
 AirValveFB:=REAL_TO_INT (AirValveFB_prph);
-GasRegValveFB:=REAL_TO_INT (GasRegValveFB_prph);
+(*GasRegValveFB:=REAL_TO_INT (GasRegValveFB_prph); *)
 IF ControlMode<>2 THEN
 	PowerSP:=REAL_TO_INT (PowerSP_prph);
 	HeatTemperature:=HeatTemperatureSP;
 ELSE
 	HeatTemperature:=(PowerSP_prph*INT_TO_REAL(HeatTemperatureHH-HeatTemperatureLL)/100.0)+INT_TO_REAL(HeatTemperatureLL);
 END_IF;
-AirPressure:=REAL_TO_INT (AirPressure_prph*40.0);
+(*AirPressure:=REAL_TO_INT (AirPressure_prph*40.0); *)
 
 
 
@@ -1973,12 +1973,12 @@ FlameSensor(
 	CheckingTime:=FlameSensorCheckingTime,
 	Simulate:=FlameSensorSim,
 	FeedBack:=FlameSensor_prph,
-	Beat=>FlameSensorBeat_prph ,
+	Beat=> (*FlameSensorBeat_prph *),
 	CurrentState=>FlameSensorState);
 
 GasRegValve(
 	FeedBack:=GasRegValveFB,
-	FeedBackBeat:=GasRegValveFB_prphBeat,
+	FeedBackBeat:=(*GasRegValveFB_prphBeat*) (*Попробовать заменить датик топлива*),
 	SetPoint:=GasRegValveSetPoint,
 	DeadBand:=GasRegValveDeadBand,
 	Gain:=GasRegValveGain,
@@ -2018,8 +2018,8 @@ AirValve(
 	Error=>AirValveError);
 
 Fun(
-	Pressure:=AirPressure,
-	PressureBeat:=AirPressure_prphBeat,
+	Pressure:=AirPressure (*Нет аналогового датчика подумать*),
+	PressureBeat:=(*AirPressure_prphBeat *) (*Нет аналогового датчика*),
 	DelayTimeForCheking:=FunDelayTimeForCheking,
 	PressureHH:=FunPressureHH,
 	PressureH:=FunPressureH,
