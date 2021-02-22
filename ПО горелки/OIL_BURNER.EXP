@@ -168,7 +168,7 @@ ControlStateOld:=ControlState;
 
 IF ControlMode<>3 THEN
 	CASE ControlState OF
-		0:																				(*Полный останов*)
+		0:				(*Полный останов*)
 			AirValveSetPoint:=0;
 			FunStart:=FALSE;
 			GasValveStart:=FALSE;
@@ -403,69 +403,53 @@ END_FUNCTION_BLOCK
 (* @SYMFILEFLAGS := '2048' *)
 FUNCTION_BLOCK DriverFun
 VAR_INPUT
-	Pressure:INT;
-	PressureBeat:INT;
 	DelayTimeForCheking:INT:=30;
-	PressureHH:INT;
-	PressureH:INT;
-	PressureL:INT;
-	PressureLL:INT;
+	bPress_NC: BOOL; (*н.з. контакт от датчика давления*)
+	bPress_NO: BOOL; (*н.о. контакт от датчика давления*)
 	Start:BOOL;
 	Stop:BOOL;
 	Reset:BOOL;
 END_VAR
 
 VAR_IN_OUT
-	PressureMax:INT;
-	PressureMin:INT;
 	Set:BOOL;
 END_VAR
 
 VAR_OUTPUT
-	Warning:BYTE;
 	Error:BYTE;
 END_VAR
 VAR
-	PressureBeatOld:INT;
 	ton1:INT;
 	ton2: BYTE;
 END_VAR
 
 (* @END_DECLARATION := '0' *)
 
-IF Reset AND Error<>0 THEN Error:=0; Warning:=0;  ton1:=0; END_IF;
+IF Reset AND Error<>0 THEN Error:=0;  ton1:=0;  END_IF;
 
-Warning.0:=(PressureBeatOld=PressureBeat) AND (PressureBeatOld=-1);
-
-IF PressureBeatOld<>PressureBeat THEN
-	PressureBeatOld:=PressureBeat;
-END_IF;
-
+(*счётчик после запуска*)
 IF set AND ton1<(DelayTimeForCheking*10) THEN	ton1:=ton1+1;
 ELSIF NOT set THEN ton1:=0;
 END_IF;
 
-IF Pressure>PressureHH THEN
-	IF ton2<50 THEN
-		ton2:=ton2+1;
-	ELSE
-		Error.1:=TRUE;
-	END_IF;
-ELSIF Pressure>PressureMax THEN
-	PressureMax:=Pressure;
-ELSIF ton1>=(DelayTimeForCheking*10) AND Pressure<PressureLL THEN
+(*bPress_NO  and bPress_NC дублируют друг друга*)
+(*контроль монтажа датчка давления *)
+IF  bPress_NO OR NOT  bPress_NC THEN
+		IF ton2 < 50 THEN
+			ton2:=ton2+1;
+		ELSE
+			Error.1:=TRUE;
+		END_IF;
+	(*Авария вентилятора после отсчёта ton1*)
+ELSIF  ( ton1 >= (DelayTimeForCheking*10) AND NOT bPress_NO)
+	OR  (ton1 >= (DelayTimeForCheking*10) AND  bPress_NC ) THEN
 	IF ton2<50 THEN
 		ton2:=ton2+1;
 	ELSE
 		Error.2:=TRUE;
 	END_IF;
-ELSIF ton1>=(DelayTimeForCheking*10) AND Pressure<PressureMin THEN
-	PressureMin:=Pressure;
 ELSE ton2:=0;
 END_IF;
-
-Warning.1:=Pressure>PressureH AND NOT Error.1;
-Warning.2:=Pressure<PressureL AND NOT Error.2 AND ton1>=(DelayTimeForCheking*10);
 
 IF NOT Stop THEN Set:=Start; END_IF;
 END_FUNCTION_BLOCK
@@ -1038,17 +1022,17 @@ IF trgr.0 OR FaultReset THEN
 	ELSIF GasValveErrors.0 THEN NumberMessage:=5;
 	ELSIF GasValveErrors.1 THEN NumberMessage:=6;
 	ELSIF GasValveErrors.2 THEN NumberMessage:=7;
+	ELSIF GasValveWarnings.1 THEN NumberMessage:=8;
+	ELSIF GasValveWarnings.2 THEN NumberMessage:=9;
 	ELSIF FunErrors.1 THEN NumberMessage:=11;
 	ELSIF FunErrors.2 THEN NumberMessage:=12;
+	(*ELSIF FunWarnings.0 THEN NumberMessage:=10; *)
+	(*ELSIF FunWarnings.1 THEN NumberMessage:=13;
+	ELSIF FunWarnings.2 THEN NumberMessage:=14; *)
 	ELSIF BurnerErrors.0 THEN NumberMessage:=15;
 	ELSIF BurnerErrors.1 THEN NumberMessage:=16;
 	ELSIF BurnerErrors.2 THEN NumberMessage:=17;
 	ELSIF GasValveErrors.3 THEN  NumberMessage:=18;
-	ELSIF GasValveWarnings.1 THEN NumberMessage:=8;
-	ELSIF GasValveWarnings.2 THEN NumberMessage:=9;
-	ELSIF FunWarnings.0 THEN NumberMessage:=10;
-	ELSIF FunWarnings.1 THEN NumberMessage:=13;
-	ELSIF FunWarnings.2 THEN NumberMessage:=14;
 	ELSE NumberMessage:=0;
 	END_IF;
 END_IF
@@ -1158,17 +1142,17 @@ CASE scrn OF															(*выбор окон*)
 				tmp2:='Газ:В давление';
 			9:
 				tmp2:='Газ:Н давление';
-			10:
-				tmp2:='Взд:ош датчика';
+			(*10:
+				tmp2:='Взд:ош датчика'; *)
 			11:
-				tmp2:='Взд:ВВ давление';
-			12:
-				tmp2:='Взд:НН давление';
+				tmp2:='Взд:ош датчика';
+			(*12:
+				tmp2:='Взд:Н давление';
 			13:
 				tmp2:='Взд:В давление';
 			14:
-				tmp2:='Взд:Н давление';
-			15:
+				tmp2:='Взд:Н давление'; *)
+			15: 
 				tmp2:='Горелка открыта';
 			16:
 				tmp2:='Посторонний свет';
@@ -1197,7 +1181,8 @@ CASE scrn OF															(*выбор окон*)
 		(*END_IF; *)
 
 		IF mode<>0 THEN mode:=2; END_IF;
-		Screen(row1:= tmp1 , row2:=tmp3 , row3:='Взд=   %Р=   0Па', row4:=tmp2, sp1:=tmp4, sp2:=GasRegulatorSetPoint, sp3:= REAL_TO_INT(AirValve.CurrentPosition), sp4:=AirPressure/10, mode:=mode);
+		(*?? Убрать так как нет аналогово датчика*)
+		Screen(row1:= tmp1 , row2:=tmp3 , row3:= , row4:=tmp2, sp1:=tmp4, sp2:=GasRegulatorSetPoint, sp3:= REAL_TO_INT(AirValve.CurrentPosition), sp4:=AirPressure/10, mode:=mode);
 		IF mode=2 AND trgr.0 THEN IF key_up THEN GasRegulatorSetPoint:=GasRegulatorSetPoint+1; ELSIF key_down THEN GasRegulatorSetPoint:=GasRegulatorSetPoint-1; END_IF; END_IF;
 
 	(**********Окна общих настроек**********)
@@ -1232,7 +1217,7 @@ CASE scrn OF															(*выбор окон*)
 			END_CASE;
 		END_IF;
 
-	103:
+	(*103: (* Нет аналогового датчика*)
 		Screen(row1:= 'Настройка' , row2:='Давление воздуха' , row3:='ВВ (ав)=   0 Па' , row4:='В  (пр)=   0 Па', sp1:=FunPressureHH/10, sp2:=FunPressureH/10, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
@@ -1247,7 +1232,7 @@ CASE scrn OF															(*выбор окон*)
 				1:	IF key_up THEN FunPressureL:=FunPressureL+10; ELSIF key_down THEN FunPressureL:=FunPressureL-10; END_IF;
 				2:	IF key_up THEN FunPressureLL:=FunPressureLL+10; ELSIF key_down THEN FunPressureLL:=FunPressureLL-10; END_IF;
 			END_CASE;
-		END_IF;
+		END_IF;  *)
 	105:
 		Screen(row1:= 'Настройка' , row2:='Давление воздуха' , row3:='Задержка на' , row4:='проверку=    с', sp1:=FunDelayTimeForCheking, mode:=mode);
 		IF trgr.0 THEN
@@ -1448,8 +1433,8 @@ CASE scrn OF															(*выбор окон*)
 	(**********Окна сервисного режима**********)
 	160:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Задание мощности' , row4:='Значение=', sp1:= PowerSP, mode:=mode);
-	161:
-		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Давление воздуха' , row4:='Знач=    0 Па', sp1:= AirPressure/10, mode:=mode);
+	(*161: (*Нет аналогового датчика*)
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Давление воздуха' , row4:='Знач=    0 Па', sp1:= AirPressure/10, mode:=mode); *)
 	(*162:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Реле газа вход' , row4:='Знач=', sp1:=BOOL_TO_INT(GasIncomingPressureMax), mode:=mode); *)
 	163:
@@ -2017,8 +2002,17 @@ AirValve(
 	Error=>AirValveError);
 
 Fun(
+	DelayTimeForCheking:=FunDelayTimeForCheking,
+	Start:=FunStart,
+	Stop:=FunStop,
+	bPress_NC:= bPass_Air_NC,
+	bPress_NO:= bPass_Air_NO,
+	Reset:=FaultReset,
+	Set:=FunSet,
+	Error=>FunError);
+
+(*Fun(
 	Pressure:=AirPressure (*Нет аналогового датчика подумать*),
-	PressureBeat:=(*AirPressure_prphBeat *) (*Нет аналогового датчика*),
 	DelayTimeForCheking:=FunDelayTimeForCheking,
 	PressureHH:=FunPressureHH,
 	PressureH:=FunPressureH,
@@ -2031,7 +2025,7 @@ Fun(
 	PressureMin:=FunPressureMin,
 	Set:=FunSet,
 	Warning=>FunWarning,
-	Error=>FunError);
+	Error=>FunError); *)
 
 GasValve( (*??*)
 	Mode:=1,
@@ -2110,7 +2104,7 @@ Messages(
 	GasValveErrors:=GasValveError ,
 	GasValveWarnings:=GasValveWarning,
 	FunErrors:=FunError,
-	FunWarnings:=FunWarning,
+	FunWarnings:=FALSE,
 	BurnerErrors:=BurnerErrors,
 	BurnerWarnings:= ,
 	FaultReset:=FaultReset,
