@@ -6,19 +6,17 @@
 (* @SYMFILEFLAGS := '2048' *)
 FUNCTION_BLOCK DriverAirValve
 VAR_INPUT
-	FeedBack:INT;
-	FeedBackBeat:INT;
-	SetPoint:INT;
-	Discrepancy:INT;
-	FaultTime:BYTE;
+	reValuePosition : REAL; (*Потенциометр*)
+	reValuePositionBeat : REAL; (*Потенциометр*)
+
+	Start:BOOL;
 	Stop:BOOL;
 	Reset:BOOL;
 END_VAR
 
 VAR_IN_OUT
-	Set:INT;
-	SetPointMax:INT;
-	SetPointMin:INT;
+	bValueMore: BOOL;
+	bValueLess: BOOL;
 END_VAR
 
 VAR_OUTPUT
@@ -28,13 +26,17 @@ END_VAR
 VAR
 	FeedBackBeatOld:INT;
 	ton1:INT;
+	intValuePosition: INT;
+	intValuePositionBeat: INT;
 END_VAR
 (* @END_DECLARATION := '0' *)
 
-IF SetPointMin>=SetPointMax THEN SetPointMax:=SetPointMin +1; END_IF;
-IF SetPoint>SetPointMax THEN SetPoint:=SetPointMax; END_IF;
-IF SetPoint<SetPointMin THEN SetPoint:=SetPointMin; END_IF;
+intValuePosition:=REAL_TO_INT(reValuePosition);
+intValuePositionBeat:=REAL_TO_INT(reValuePositionBeat);
 
+IF Reset AND Error<>0 THEN Error:=0; ton1:=0; END_IF;
+
+(*
 IF (SetPoint-Discrepancy>FeedBack OR SetPoint+Discrepancy<FeedBack) AND FeedBackBeat=FeedBackBeatOld THEN
 	Done:=FALSE;
 	IF ton1<(FaultTime*10) THEN
@@ -43,18 +45,12 @@ IF (SetPoint-Discrepancy>FeedBack OR SetPoint+Discrepancy<FeedBack) AND FeedBack
 		Error.0:=TRUE;
 	END_IF;
 ELSE ton1:=0; Done:=TRUE;
-END_IF;
-
-IF Reset AND Error<>0 THEN Error:=0; ton1:=0; END_IF;
-
-IF FeedBackBeatOld<>FeedBackBeat THEN
-	FeedBackBeatOld:=FeedBackBeat;
-END_IF;
+END_IF; 
 
 IF NOT Stop AND Error=0 THEN
 	Set:=SetPoint;
 ELSE Done:=FALSE;
-END_IF;
+END_IF;  *)
 
 
 END_FUNCTION_BLOCK
@@ -1857,6 +1853,7 @@ VAR
 	ptr_D:POINTER TO BYTE;
 	Modbus_prph:INT;
 
+
 END_VAR
 (* @END_DECLARATION := '0' *)
 (*Устанавливаем настройки COM-порта*)
@@ -1878,8 +1875,8 @@ Trans_prph:=BOOL_TO_REAL(Trans);
 (*Запись в модуль*)
 Modbus_prph.0:= bOut_PZK1;
 Modbus_prph.1:= bOut_PZK2;
-Modbus_prph.2:= bOut_Air_more;
-Modbus_prph.3:=bOut_Air_less;
+Modbus_prph.2:= bOut_Air_more; (*Воздушный клапан добавть*)
+Modbus_prph.3:=bOut_Air_less;	 (*Воздушный клапан убавить*)
 Modbus_prph.4:=GasRegUp; (*Неиспользуется*)
 Modbus_prph.5:=GasRegDown; (*Неиспользуется*)
 Modbus_prph.6:=Pump;(*насос*) (*Неиспользуется*)
@@ -1895,6 +1892,53 @@ Modbus_prph.15:=AlarmLed;
 
 (*Modbus_prph.8:=Run;
 Modbus_prph.9:=Alarm;*)
+
+(*Авари аналоговых входов*)
+
+(*
+0         Отсутствие ошибок                             
+6         Нет данных                                    
+7         Датчик отключен                               
+8         Велика температура холодного спая             
+9          Мала температура холодного спая              
+10        Вычисленное значение слишком велико           
+11        Вычисленное значение слишком мало            
+12        Короткое замыкание                            
+13        Обрыв датчика                                 
+14        Отсутствие связи с АЦП                       
+15         Некорректный калибровочный коэффициент        
+*)
+
+DECODE_FLOA_AI1(
+	VALUE:= reOil_Valve_AI1,
+	DEF_VALUE:= 0.0,
+	_ERR=> byErr_AI1,
+	OUT_VALUE=> reOil_Valve);
+
+DECODE_FLOA_AI3(
+	VALUE:= rePress_Oil_Return_AI3,
+	DEF_VALUE:= 0.0,
+	_ERR=> byErr_AI3,
+	OUT_VALUE=> rePress_Oil_Return);
+
+DECODE_FLOA_AI4(
+	VALUE:= reTemp_Oil_AI4,
+	DEF_VALUE:= 0.0,
+	_ERR=> byErr_AI4,
+	OUT_VALUE=> reTemp_Oil);
+
+DECODE_FLOA_AI5(
+	VALUE:= reHeater_Oil1_AI5,
+	DEF_VALUE:= 0.0,
+	_ERR=> byErr_AI5,
+	OUT_VALUE=> reHeater_Oil1);
+
+DECODE_FLOA_AI8(
+	VALUE:= reHeater_Oil2_AI8,
+	DEF_VALUE:= 0.0,
+	_ERR=> byErr_AI8,
+	OUT_VALUE=> reHeater_Oil2);
+
 
 LimitSwitch:=LimitSwitch_prph;
 Start:=bStart_Stop_Burner; (*Запуск с поля*)
@@ -1980,6 +2024,8 @@ GasRegValve(
 	CurrentPosition=>,
 	Error=>GasRegValveError);
 
+
+(*
 AirValve(
 	FeedBack:=AirValveFB,
 	FeedBackBeat:=AirValveFB_prphBeat,
@@ -1999,7 +2045,7 @@ AirValve(
 	SetDown:=  AirRegDown ,
 	Done=>AirValveDone,
 	CurrentPosition=>,
-	Error=>AirValveError);
+	Error=>AirValveError); *)
 
 Fun(
 	DelayTimeForCheking:=FunDelayTimeForCheking,
@@ -2104,7 +2150,7 @@ Messages(
 	GasValveErrors:=GasValveError ,
 	GasValveWarnings:=GasValveWarning,
 	FunErrors:=FunError,
-	FunWarnings:=FALSE,
+	FunWarnings:=0,
 	BurnerErrors:=BurnerErrors,
 	BurnerWarnings:= ,
 	FaultReset:=FaultReset,
