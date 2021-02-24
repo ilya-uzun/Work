@@ -1299,7 +1299,7 @@ CASE scrn OF															(*выбор окон*)
 				2:	IF key_up THEN FunPressureLL:=FunPressureLL+10; ELSIF key_down THEN FunPressureLL:=FunPressureLL-10; END_IF;
 			END_CASE;
 		END_IF;  *)
-	105:
+	(*105:
 		Screen(row1:= 'Настройка' , row2:='Давление воздуха' , row3:='Задержка на' , row4:='проверку=    с', sp1:=FunDelayTimeForCheking, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
@@ -1312,7 +1312,7 @@ CASE scrn OF															(*выбор окон*)
 			CASE mode OF
 				1:	IF key_up THEN GasRegValveDeadBand:=GasRegValveDeadBand+1; ELSIF key_down THEN GasRegValveDeadBand:=GasRegValveDeadBand-1; END_IF;
 			END_CASE;
-		END_IF;
+		END_IF;  
 	107:
 		Screen(row1:= 'Настройка' , row2:='Заслонка газа' , row3:='Время хода=   с' , row4:='ВрОшибки =   с', sp1:=GasRegValveRunningTime, sp2:=GasRegValveFaultTime, mode:=mode);
 		IF trgr.0 THEN
@@ -1320,8 +1320,8 @@ CASE scrn OF															(*выбор окон*)
 				1:	IF key_up THEN GasRegValveRunningTime:=GasRegValveRunningTime+1; ELSIF key_down THEN GasRegValveRunningTime:=GasRegValveRunningTime-1; END_IF;
 				2:	IF key_up THEN GasRegValveFaultTime:=GasRegValveFaultTime+1; ELSIF key_down THEN GasRegValveFaultTime:=GasRegValveFaultTime-1; END_IF;
 			END_CASE;
-		END_IF;
-	108:
+		END_IF;   *)
+	108: (*??*)
 		Screen(row1:= 'Настройка' , row2:='ТемпКотла=   Гр' , row3:='ДиапВерх=   Гр' , row4:='ДиапНиз=   Гр', sp1:=REAL_TO_INT(HeatTemperature), sp2:=HeatTemperatureHH, sp3:=HeatTemperatureLL, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
@@ -1376,7 +1376,7 @@ CASE scrn OF															(*выбор окон*)
 
 	(**********Окна настроек контрольных точек**********)
 	130:
-		Screen(row1:= 'КонтрольнТочки' , row2:='ВздРозжига=    %' , row3:='ГазРозжига=    %' , row4:='', sp1:=Air0, sp2:=Oil0, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='ВздРозжига=    %' , row3:='ТопРозжига=    %' , row4:='', sp1:=Air0, sp2:=Oil0, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air0:=Air0+1; ELSIF key_down THEN Air0:=Air0-1; END_IF;
@@ -1384,7 +1384,7 @@ CASE scrn OF															(*выбор окон*)
 			END_CASE;
 		END_IF;
 	131:
-		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 1 =    %' , row3:='Газ 1 =       %' , row4:='', sp1:=Air1, sp2:=Oil1, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 1 =    %' , row3:='Топливо 1 =       %' , row4:='', sp1:=Air1, sp2:=Oil1, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air1:=Air1+1; ELSIF key_down THEN Air1:=Air1-1; END_IF;
@@ -1392,7 +1392,7 @@ CASE scrn OF															(*выбор окон*)
 			END_CASE;
 		END_IF;
 	132:
-		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 2 =    %' , row3:='Газ 2 =       %' , row4:='', sp1:=Air2, sp2:=Oil2, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 2 =    %' , row3:='Топливо 2 =       %' , row4:='', sp1:=Air2, sp2:=Oil2, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air2:=Air2+1; ELSIF key_down THEN Air2:=Air2-1; END_IF;
@@ -1400,7 +1400,7 @@ CASE scrn OF															(*выбор окон*)
 			END_CASE;
 		END_IF;
 	133:
-		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 3 =    %' , row3:='Газ 3 =       %' , row4:='', sp1:=Air3, sp2:=Oil3, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 3 =    %' , row3:='Топливо 3 =       %' , row4:='', sp1:=Air3, sp2:=Oil3, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air3:=Air3+1; ELSIF key_down THEN Air3:=Air3-1; END_IF;
@@ -1408,7 +1408,7 @@ CASE scrn OF															(*выбор окон*)
 			END_CASE;
 		END_IF;
 	134:
-		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 4 =    %' , row3:='Газ 4 =       %' , row4:='', sp1:=Air4, sp2:=Oil4, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 4 =    %' , row3:='Топливо4 =       %' , row4:='', sp1:=Air4, sp2:=Oil4, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air4:=Air4+1; ELSIF key_down THEN Air4:=Air4-1; END_IF;
@@ -1416,7 +1416,7 @@ CASE scrn OF															(*выбор окон*)
 			END_CASE;
 		END_IF;
 	135:
-		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 5 =    %' , row3:='Газ 5 =       %' , row4:='', sp1:=Air5, sp2:=Oil5, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 5 =    %' , row3:='Топливо 5 =       %' , row4:='', sp1:=Air5, sp2:=Oil5, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air5:=Air5+1; ELSIF key_down THEN Air5:=Air5-1; END_IF;
@@ -1424,7 +1424,7 @@ CASE scrn OF															(*выбор окон*)
 			END_CASE;
 		END_IF;
 	136:
-		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 6 =    %' , row3:='Газ 6 =       %' , row4:='', sp1:=Air6, sp2:=Oil6, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 6 =    %' , row3:='Топливо 6 =       %' , row4:='', sp1:=Air6, sp2:=Oil6, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air6:=Air6+1; ELSIF key_down THEN Air6:=Air6-1; END_IF;
@@ -1432,7 +1432,7 @@ CASE scrn OF															(*выбор окон*)
 			END_CASE;
 		END_IF;
 	137:
-		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 7 =    %' , row3:='Газ 7 =       %' , row4:='', sp1:=Air7, sp2:=Oil7, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 7 =    %' , row3:='Топливо 7 =       %' , row4:='', sp1:=Air7, sp2:=Oil7, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air7:=Air7+1; ELSIF key_down THEN Air7:=Air7-1; END_IF;
@@ -1440,7 +1440,7 @@ CASE scrn OF															(*выбор окон*)
 			END_CASE;
 		END_IF;
 	138:
-		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 8 =    %' , row3:='Газ 8 =       %' , row4:='', sp1:=Air8, sp2:=Oil8, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 8 =    %' , row3:='Топливо 8 =       %' , row4:='', sp1:=Air8, sp2:=Oil8, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air8:=Air8+1; ELSIF key_down THEN Air8:=Air8-1; END_IF;
@@ -1448,7 +1448,7 @@ CASE scrn OF															(*выбор окон*)
 			END_CASE;
 		END_IF;
 	139:
-		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 9 =    %' , row3:='Газ 9 =       %' , row4:='', sp1:=Air9, sp2:=Oil9, sp3:=, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух 9 =    %' , row3:='Топливо 9 =       %' , row4:='', sp1:=Air9, sp2:=Oil9, sp3:=, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air9:=Air9+1; ELSIF key_down THEN Air9:=Air9-1; END_IF;
@@ -1456,7 +1456,7 @@ CASE scrn OF															(*выбор окон*)
 			END_CASE;
 		END_IF;
 	140:
-		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух10 =    %' , row3:='Газ10 =       %' , row4:='', sp1:=Air10, sp2:=Oil10, mode:=mode );
+		Screen(row1:= 'КонтрольнТочки' , row2:='Воздух10 =    %' , row3:='Топливо10 =       %' , row4:='', sp1:=Air10, sp2:=Oil10, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
 				1:	IF key_up THEN Air10:=Air10+1; ELSIF key_down THEN Air10:=Air10-1; END_IF;
@@ -1479,7 +1479,7 @@ CASE scrn OF															(*выбор окон*)
 				1:	IF key_up THEN GasRegulatorChangingTime:=GasRegulatorChangingTime+1; ELSIF key_down AND GasRegulatorChangingTime>0 THEN GasRegulatorChangingTime:=GasRegulatorChangingTime-1; END_IF;
 			END_CASE;
 		END_IF;
-	143:
+	143: (*??*)
 		Screen(row1:= 'КонтрольнТочки' , row2:='Диз топливо' , row3:='Воздух0 =    %' , row4:='Воздух1 =    %', sp1:=AirValveOil0, sp2:=AirValveOil1, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
@@ -1487,7 +1487,7 @@ CASE scrn OF															(*выбор окон*)
 				2:	IF key_up THEN AirValveOil1:=AirValveOil1+1; ELSIF key_down THEN AirValveOil1:=AirValveOil1-1; END_IF;
 			END_CASE;
 		END_IF;
-	144:
+	144: (*??*)
 		Screen(row1:= 'КонтрольнТочки' , row2:='Диз топливо' , row3:='Воздух2 =    %' , row4:='Воздух3 =    %', sp1:=AirValveOil2, sp2:=AirValveOil3, mode:=mode );
 		IF trgr.0 THEN
 			CASE mode OF
@@ -1522,9 +1522,9 @@ CASE scrn OF															(*выбор окон*)
 	169:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='ПЗК2' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(bOut_PZK2));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN bOut_PZK2:=TRUE; ELSIF key_down THEN bOut_PZK2:=FALSE; END_IF; END_IF;
-	170:
+	(*170:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Газовая заслонка' , row4:='/-/ R=     Om /+/', mode:= mode, sp1:= GasRegValveFB);
-		IF mode=1 AND trgr.0 THEN GasRegUp:=key_up; GasRegDown:=key_down; END_IF;
+		IF mode=1 AND trgr.0 THEN GasRegUp:=key_up; GasRegDown:=key_down; END_IF;  *)
 	171:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Сигнал работа' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Run));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN Run:=TRUE; ELSIF key_down THEN Run:=FALSE; END_IF; END_IF;
@@ -1540,14 +1540,14 @@ CASE scrn OF															(*выбор окон*)
 	175:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Индикатор Авария' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(AlarmLed));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN AlarmLed:=TRUE; ELSIF key_down THEN AlarmLed:=FALSE; END_IF; END_IF;
-	176:
+	(* 176:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Кл-н запальника' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValveIgnition));
-		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValveIgnition:=TRUE; ELSIF key_down THEN GasValveIgnition:=FALSE; END_IF; END_IF;
+		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValveIgnition:=TRUE; ELSIF key_down THEN GasValveIgnition:=FALSE; END_IF; END_IF;  *)
 	(*177:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Реле герм-ности' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(GasSafetyPressureMax));*)
-	178:
+	(* 178:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Кл-н безоп-ти' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(GasValveSafety));
-		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValveSafety:=TRUE; ELSIF key_down THEN GasValveSafety:=FALSE; END_IF; END_IF;
+		IF mode=1 AND trgr.0 THEN IF key_up THEN GasValveSafety:=TRUE; ELSIF key_down THEN GasValveSafety:=FALSE; END_IF; END_IF; *)
 	(*179:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='НасосТоплива' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Pump));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN Pump:=TRUE; ELSIF key_down THEN Pump:=FALSE; END_IF; END_IF; *)
