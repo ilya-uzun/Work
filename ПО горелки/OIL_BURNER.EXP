@@ -217,7 +217,7 @@ IF ControlMode<>3 THEN
 			Valve3:=FALSE;
 			Pump:=FALSE;
 			bOpenAirValue := TRUE;
-			IF startcmnd AND Health THEN IF TRUE (*NOT OilMode *)THEN ControlState:=1; ELSE ControlState:=20; END_IF; END_IF;
+			(*??*)IF startcmnd AND Health THEN IF TRUE (*NOT OilMode *)THEN ControlState:=1; ELSE ControlState:=20; END_IF; END_IF;
 		1:
 			IF NOT GasRegValveCalibrateComplete THEN
 				GasRegValveCalibrateEnable:=TRUE;
@@ -1262,7 +1262,7 @@ CASE scrn OF															(*выбор окон*)
 				IF mode=1 AND trgr.0 AND key_up THEN ControlMode:=ControlMode+1; END_IF;
 				IF mode=1 AND trgr.0 AND key_down THEN ControlMode:=ControlMode-1; END_IF;
 			2:
-				tmp1:='Котел';
+				tmp1:='Котел'; (*Работа по pt100*)
 				IF mode=1 AND trgr.0 AND key_down THEN ControlMode:=ControlMode-1; END_IF;
 		END_CASE;
 		Screen(row1:= 'Настройка' , row2:='Выбор управления' , row3:=tmp1 , row4:='           режим', mode:=mode);
@@ -2143,6 +2143,7 @@ GasValve( (*??*)
 	Warning=>GasValveWarning,
 	Error=>GasValveError);
 
+(*Регулировка по pt100*)
 IF ControlMode=2 THEN
 BoilerControl(
 	StartIn:=Start,
