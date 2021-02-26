@@ -1229,7 +1229,7 @@ CASE scrn OF															(*выбор окон*)
 			26:
 				tmp2:='Ош задания';
 		END_CASE;
-(*Выбор режмов *)
+(*Выбор режимов *)
 	(*	IF NOT OilMode THEN
 			IF ControlMode<>2 THEN
 				tmp3:='Газ=   %Мощ=   %'; tmp4:=GasRegulatorSetPoint;
@@ -2094,9 +2094,9 @@ GasRegValve(
 	CalibrateEnable:=GasRegValveCalibrateEnable,
 	FeedBackMax:=GasRegValveFeedBackMax,
 	FeedBackMin:=GasRegValveFeedBackMin,
-	ChangingSpeed:=GasRegValveChangingSpeed,
+	ChangingSpeed:=(*GasRegValveChangingSpeed*) bRegulator_Oil, (*Проверить регулировку*)
 	CalibrateComplete:=GasRegValveCalibrateComplete,
-	SetUp:=GasRegUp,
+	SetUp:=GasRegUp, (*?? Проверить возможно ли использовать для дскретов воздушного клапана*)
 	SetDown:=GasRegDown,
 	CurrentPosition=>,
 	Error=>GasRegValveError);
