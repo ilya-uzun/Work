@@ -74,7 +74,7 @@ IF timeTO1 <> time_Old THEN
 		END_IF
 END_IF
 
-IF set AND NOT Error.1  THEN
+IF set  (*AND NOT Error.1 *) THEN
 		IF time_Old2 < 0 THEN
 			time_Old3:= time_Old2*(-1); (*избавляемся от минуса*)
 			time_OldMore :=  DINT_TO_TIME(time_Old3);
@@ -1939,6 +1939,8 @@ END_IF
 COM_SERVICE1(Enable:=(port_opened=0) , Settings:=Settings , Task:=OPEN_TSK  );
 
 Trans_prph:=BOOL_TO_REAL(Trans);
+reHeating_Oil:=BOOL_TO_REAL(bHeating_Oil);
+reHeating_Value:=BOOL_TO_REAL(bHeating_Value);
 (*CurrentPower_prph:=CurrentPower; *)
 (*AirValve_prph:=INT_TO_REAL(AirValveSet)/100.0; *)
 
@@ -1951,7 +1953,7 @@ Modbus_prph.4:=GasRegUp; (*Неиспользуется*)
 Modbus_prph.5:=GasRegDown; (*Неиспользуется*)
 Modbus_prph.6:=Pump;(*насос*) (*Неиспользуется*)
 Modbus_prph.7:=Valve3;(*ст3*)  (*Неиспользуется*)
-Modbus_prph.8:=Valve3;(*ст3*)  (*Неиспользуется*)
+Modbus_prph.8:=Valve3;(*ст3*)  (*Клапан топлива*)
 Modbus_prph.9:=Valve2;(*ст2*)  (*Неиспользуется*)
 Modbus_prph.10:=Valve1;(*ст1*)  (*Неиспользуется*)
 Modbus_prph.11:=FunSet; (*Запуск вентилятора*)
