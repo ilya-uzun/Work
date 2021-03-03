@@ -207,7 +207,7 @@ ControlStateOld:=ControlState;
 IF ControlMode<>3 THEN
 	CASE ControlState OF
 		0:				(*Полный останов*)
-			AirValveSetPoint:=100; (*Открыть полностью воздушный клапан*)
+		(*	AirValveSetPoint:=100; (*Открыть полностью воздушный клапан*)
 			FunStart:=FALSE;
 			(*GasValveStart:=FALSE;*)
 			Trans:=FALSE;
@@ -215,7 +215,7 @@ IF ControlMode<>3 THEN
 			bOut_ValueY1_NC:=FALSE;
 			bOut_ValueY2_NO:=FALSE;
 			Valve3:=FALSE;
-			bOpenAirValue := TRUE; (*апуск DriversAirValue*)
+			bOpenAirValue := TRUE; (*апуск DriversAirValue*)  *)
 			(*??*)IF startcmnd AND Health THEN ControlState:=20; ELSE ControlState:=0; END_IF;
 
 		20:  (*Калибровка воздушного клапана*)
@@ -1952,6 +1952,9 @@ VAR
 
 END_VAR
 (* @END_DECLARATION := '0' *)
+
+(*ControlState := SEL (startModeManual,1,0); *)
+
 (*Устанавливаем настройки COM-порта*)
 IF port_opened=0 THEN
 		Settings.Port:=com_num;
@@ -2169,8 +2172,8 @@ GasValve( (*??*)
 	Reset:=FaultReset,
 	PressureMax:=GasValvePressureMax,
 	PressureMin:=GasValvePressureMin,
-	Valve1:=bOut_ValueY1_NC,
-	Valve2:=bOut_ValueY2_NO,
+	Valve1:=Valve1,
+	Valve2:= Valve1,
 	ValveSafety:=GasValveSafety,
 	ValveIgnition:=GasValveIgnition,
 	Done=>GasValveDone,
@@ -2262,17 +2265,17 @@ END_PROGRAM
 
 VISUALISATION vi _VISU_TYPES : 1,1
 _BG_BMP : ''
-_TEXT : 124
+_TEXT : 129
 _PAINTZOOM : 100
 
 _SIMPLE : 0
 _LINEWIDTH : 0
 _NOCOLORS : 1,1
-_POS : 70,20,181,71,125,45
+_POS : 300,300,411,351,355,325
 _COLORS : 16777215,0,16777215,0,0
 _VARIABLES : '','','','','','','',''
 _THRESH : '','','',''
-_DSP : '.TimeAir','',''
+_DSP : '.AirValveSetPoint','Привод воздуха$R$Nв сек',''
 _ZOOM : ''
 _INPUT : 1048576
 _TEXT : 5,4294967284,400,0,0,0,0,204
@@ -2282,31 +2285,6 @@ _TEXTVARIABLES : '','','','',''
 _COLORVARIABLES : '','','','','',''
 _ACCESSLEVELS : 2,2,2,2,2,2,2,2
 _OBJECT : 0,1
-_THRESH2 : '','','',''
-_INPUTTYPE : '','',''
-_HIDDENINPUT : 0
-_END_ELEM
-(* @TEXTSCALINGVARS := '_TEXTSCALINGVARS: $'$',$'$'' *)
-(* @EXTENDEDSIMPLESHAPE := '_SIMPLE: 0' *)
-(* @INPUTTAPFALSE := '_INPUTTAPFALSE: 0' *)
-
-_SIMPLE : 2
-_LINEWIDTH : 0
-_NOCOLORS : 1,1
-_POS : 260,30,311,81,285,55
-_COLORS : 16777215,0,16777215,0,0
-_VARIABLES : '','','','','','','',''
-_THRESH : '','','',''
-_DSP : '','',''
-_ZOOM : ''
-_INPUT : 0
-_TEXT : 5,4294967284,400,0,117,0,0,204
-_FONT : ''
-_EXEC : ''
-_TEXTVARIABLES : '','','','',''
-_COLORVARIABLES : '','','','','',''
-_ACCESSLEVELS : 2,2,2,2,2,2,2,2
-_OBJECT : 0,0
 _THRESH2 : '','','',''
 _INPUTTYPE : '','',''
 _HIDDENINPUT : 0
@@ -2343,7 +2321,7 @@ _END_ELEM
 _SIMPLE : 0
 _LINEWIDTH : 0
 _NOCOLORS : 1,1
-_POS : 70,230,181,281,125,255
+_POS : 200,100,311,151,255,125
 _COLORS : 16777215,0,65280,0,0
 _VARIABLES : '','','','','','','',''
 _THRESH : '','.bHeating_Oil','.bHeating_Oil',''
@@ -2368,7 +2346,7 @@ _END_ELEM
 _SIMPLE : 0
 _LINEWIDTH : 0
 _NOCOLORS : 1,1
-_POS : 70,290,181,341,125,315
+_POS : 320,100,431,151,375,125
 _COLORS : 16777215,0,65280,0,0
 _VARIABLES : '','','','','','','',''
 _THRESH : '','.bHeating_Value','.bHeating_Value',''
@@ -2408,7 +2386,7 @@ _COLORVARIABLES : '','','','','',''
 _ACCESSLEVELS : 2,2,2,2,2,2,2,2
 _OBJECT : 0,1
 _THRESH2 : '','','',''
-_INPUTTYPE : '','',''
+_INPUTTYPE : '0','0.6',''
 _HIDDENINPUT : 0
 _END_ELEM
 (* @TEXTSCALINGVARS := '_TEXTSCALINGVARS: $'$',$'$'' *)
@@ -2418,14 +2396,14 @@ _END_ELEM
 _SIMPLE : 0
 _LINEWIDTH : 0
 _NOCOLORS : 1,1
-_POS : 200,250,311,301,255,275
-_COLORS : 16777215,0,16777215,0,0
+_POS : 70,240,181,291,125,265
+_COLORS : 16777215,0,65280,0,0
 _VARIABLES : '','','','','','','',''
-_THRESH : '','','',''
-_DSP : '.bRegulator_Oil2','Регулятор топлива$R$NУставка 0...100%',''
+_THRESH : '','.bOut_ValueY1_NC','.bOut_ValueY1_NC',''
+_DSP : '','Клапан Y1',''
 _ZOOM : ''
-_INPUT : 1048576
-_TEXT : 5,4294967284,400,0,122,0,0,204
+_INPUT : 65536
+_TEXT : 5,4294967284,400,0,125,0,0,204
 _FONT : ''
 _EXEC : ''
 _TEXTVARIABLES : '','','','',''
@@ -2443,14 +2421,64 @@ _END_ELEM
 _SIMPLE : 0
 _LINEWIDTH : 0
 _NOCOLORS : 1,1
-_POS : 340,250,451,301,395,275
-_COLORS : 16777215,0,16777215,0,0
+_POS : 70,300,181,351,125,325
+_COLORS : 16777215,0,65280,0,0
 _VARIABLES : '','','','','','','',''
-_THRESH : '','','',''
-_DSP : '.bRegulator_Oil3','Регулятор топлива$R$NУставка 0...100%',''
+_THRESH : '','.bOut_ValueY2_NO','.bOut_ValueY2_NO',''
+_DSP : '','Клапан Y2',''
 _ZOOM : ''
-_INPUT : 1048576
-_TEXT : 5,4294967284,400,0,123,0,0,204
+_INPUT : 65536
+_TEXT : 5,4294967284,400,0,126,0,0,204
+_FONT : ''
+_EXEC : ''
+_TEXTVARIABLES : '','','','',''
+_COLORVARIABLES : '','','','','',''
+_ACCESSLEVELS : 2,2,2,2,2,2,2,2
+_OBJECT : 0,1
+_THRESH2 : '','','',''
+_INPUTTYPE : '','',''
+_HIDDENINPUT : 0
+_END_ELEM
+(* @TEXTSCALINGVARS := '_TEXTSCALINGVARS: $'$',$'$'' *)
+(* @EXTENDEDSIMPLESHAPE := '_SIMPLE: 0' *)
+(* @INPUTTAPFALSE := '_INPUTTAPFALSE: 0' *)
+
+_SIMPLE : 0
+_LINEWIDTH : 0
+_NOCOLORS : 1,1
+_POS : 70,360,181,411,125,385
+_COLORS : 16777215,0,65280,0,0
+_VARIABLES : '','','','','','','',''
+_THRESH : '','.Valve3','.Valve3',''
+_DSP : '','Клапан Y3',''
+_ZOOM : ''
+_INPUT : 65536
+_TEXT : 5,4294967284,400,0,127,0,0,204
+_FONT : ''
+_EXEC : ''
+_TEXTVARIABLES : '','','','',''
+_COLORVARIABLES : '','','','','',''
+_ACCESSLEVELS : 2,2,2,2,2,2,2,2
+_OBJECT : 0,1
+_THRESH2 : '','','',''
+_INPUTTYPE : '','',''
+_HIDDENINPUT : 0
+_END_ELEM
+(* @TEXTSCALINGVARS := '_TEXTSCALINGVARS: $'$',$'$'' *)
+(* @EXTENDEDSIMPLESHAPE := '_SIMPLE: 0' *)
+(* @INPUTTAPFALSE := '_INPUTTAPFALSE: 0' *)
+
+_SIMPLE : 0
+_LINEWIDTH : 0
+_NOCOLORS : 1,1
+_POS : 290,240,401,291,345,265
+_COLORS : 16777215,0,65280,0,0
+_VARIABLES : '','','','','','','',''
+_THRESH : '','.FunSet','.FunSet',''
+_DSP : '','Вентилятор',''
+_ZOOM : ''
+_INPUT : 65536
+_TEXT : 5,4294967284,400,0,128,0,0,204
 _FONT : ''
 _EXEC : ''
 _TEXTVARIABLES : '','','','',''
@@ -2590,6 +2618,7 @@ VAR_GLOBAL
 	reHeater_Oil1 : REAL;
 	(*PowerSP : REAL; *)
 	reHeater_Oil2 : REAL;
+	startModeManual : BOOL; (*Старт ручного режима*)
 
 (*воздушный клапан*)
 	DAirValve : DriverAirValve;
@@ -2889,7 +2918,7 @@ _END_CHANNEL
 _CHANNEL
 _SECTION_NAME: 'AnalogOutput5'
 _INDEX_IN_PARENT: '6'
-_SYMBOLIC_NAME: 'bRegulator_Oil2'
+_SYMBOLIC_NAME: ''
 _COMMENT: 'Выход 6'
 _CHANNEL_MODE: 'Q'
 _IECADR: %QD0.1.5
@@ -2921,7 +2950,7 @@ _END_CHANNEL
 _CHANNEL
 _SECTION_NAME: 'AnalogOutput7'
 _INDEX_IN_PARENT: '8'
-_SYMBOLIC_NAME: 'bRegulator_Oil3'
+_SYMBOLIC_NAME: ''
 _COMMENT: 'Выход 8'
 _CHANNEL_MODE: 'Q'
 _IECADR: %QD0.1.7
