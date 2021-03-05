@@ -694,7 +694,7 @@ CASE ControlState OF
 	20:
 		ChangingTime:=REAL_TO_INT(10*((CurrentPosition-SetPoint+DeadBand))/(ChangingSpeed*Gain));
 		SetDown:=TRUE;
-		ControlState:=21;
+		ControlState:=20;
 	21:
 		IF FeedBackBeatOld<>FeedBackBeat THEN
 			IF SetPoint+DeadBand<CurrentPosition THEN
@@ -1033,8 +1033,8 @@ END_FUNCTION_BLOCK
 (* @PATH := '\/Drivers' *)
 (* @OBJECTFLAGS := '0, 8' *)
 (* @SYMFILEFLAGS := '2048' *)
-PROGRAM DriversHeatingOil
-VAR
+FUNCTION_BLOCK DriversHeating_Oil
+VAR_INPUT
 	bStart : BOOL;
 	Reset : BOOL;
 	reTempOilReturn : REAL; (*Температура топлива на обратке*)
@@ -1045,14 +1045,12 @@ VAR
 	byErrorHeating2: BYTE; (* Ошибка датчка  Температура наревателя 2*)
 	byControlOil : BYTE; (*Выбор топлива*)
 END_VAR
-
 VAR_OUTPUT
 	bFanPump : BOOL; (*Вкл. двигатель вентилятора*)
 	bHeatingValve : BOOL; (*Вкл. обогрев топливного клапана*)
 	bHeatingOil : BOOL; (*Вкл. обогрев топлива*)
 	bValveOil : BOOL; (*Клапан жидкого топлива*)
 END_VAR
-
 VAR
 	ON_OFF_HIST_REG_1 : ON_OFF_HIST_REG;
 	ON_OFF_HIST_REG_2 : ON_OFF_HIST_REG;
@@ -1135,7 +1133,7 @@ ELSE
 	bHeatingOil := FALSE;
 	bValveOil := FALSE;
 END_IF;
-END_PROGRAM
+END_FUNCTION_BLOCK
 
 
 (* @NESTEDCOMMENTS := 'Yes' *)
@@ -1208,9 +1206,9 @@ CASE scrn OF															(*выбор окон*)
 				tmp1:='Регулирование';
 			10:
 				tmp1:='Останов';
-			20, 21:
-				tmp1:='Калибровка     Д';
-			22, 23:
+			20:
+				tmp1:='Прогрев топлива';
+			21:
 				tmp1:='Продувка      Д';
 			24:
 				tmp1:='Розжиг         Д';
@@ -1937,7 +1935,7 @@ VAR
 	Init: BOOL;								(* признак инициализации пользовательской программы *)
 	enabl: BOOL;							(*состояние работы блока*)
 	err: INT;								(*номер ошибки*)
-	TimeOut: TIME:=T#400ms;				(*таймаут*)
+	TimeOut: TIME:=T#500ms;				(*таймаут*)
 	Exception: BYTE;
 	DataSize: WORD;
 	master1: BYTE:= 1;
@@ -2132,6 +2130,7 @@ VAR
 	ton2 : INT;
 	ton3 : INT;
 	ControlStateOld:INT;
+	DHeating_Oil : DriversHeating_Oil;
 END_VAR
 
 (* @END_DECLARATION := '0' *)
@@ -2144,7 +2143,7 @@ ELSE
 
 	IF NOT Health THEN startcmnd:=FALSE; END_IF;
 	(*Пропуск калибровки*)
-	IF NOT startcmnd AND ControlState>0 AND ControlState<>23  THEN ControlState:=23; END_IF;
+	(*IF NOT startcmnd AND ControlState>0 AND ControlState<>23  THEN ControlState:=23; END_IF; *)
 	IF ControlState<>ControlStateOld THEN ton1:=0; ton2:=0; END_IF;
 	ControlStateOld:=ControlState;
 
@@ -2152,7 +2151,7 @@ ELSE
 	IF ControlMode<>3 THEN
 		CASE ControlState OF
 			0:				(*Полный останов*)
-				AirValveSetPoint:=100; (*Открыть полностью воздушный клапан*)
+				(*AirValveSetPoint:=100; (*Открыть полностью воздушный клапан*)
 				FunStart:=FALSE;
 				(*GasValveStart:=FALSE;*)
 				Trans:=FALSE;
@@ -2160,20 +2159,29 @@ ELSE
 				bOut_ValueY1_NC:=FALSE;
 				bOut_ValueY2_NO:=FALSE;
 				Valve3:=FALSE;
-				bOpenAirValue := TRUE; (*апуск DriversAirValue*)
+				bOpenAirValue := TRUE; (*апуск DriversAirValue*) *)
 				(*??*)IF startcmnd AND Health THEN ControlState:=20; ELSE ControlState:=0; END_IF;
 	
-			20:  (*Калибровка воздушного клапана*)
-				IF NOT AirValveCalibrateComplete THEN
-					AirValveCalibrateEnable:=TRUE;
-				END_IF;
-				IF NOT AirValveCalibrateComplete THEN
-					ControlState:=21;
-				ELSE
-					GasRegInit:=TRUE;
-					ControlState:=22;
-					AirValveSetPoint:=AirValveStartSP;
-				END_IF;
+			20:
+			IF  reHeater_Oil1_AI5 < 50 THEN
+				DHeating_Oil(
+					bStart:= TRUE,
+					Reset:= ,
+					reTempOilReturn:= reTemp_Oil_AI4,
+					reHeating1:= reHeater_Oil1_AI5,
+					reHeating2:= reHeater_Oil2_AI8,
+					byErrorTempOilReturn:= 0,
+					byErrorHeating1:= 0,
+					byErrorHeating2:= 0,
+					byControlOil:= ,
+					bFanPump=> FunStart,
+					bHeatingValve=> bHeating_Oil,
+					bHeatingOil=> bHeating_Value,
+					bValveOil=> Valve3);
+			ELSE
+				ControlState:=2;
+			END_IF;
+
 			21:			(*Калибровка воздушного клапана*)
 				IF AirValveCalibrateComplete THEN ControlState:=22; AirValveSetPoint:=AirValveStartSP; END_IF;
 			22:
