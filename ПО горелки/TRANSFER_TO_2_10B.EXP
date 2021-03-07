@@ -1,0 +1,21 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION Transfer_To_2_10B : REAL
+VAR_INPUT
+	IN: REAL;				(* input value*)
+END_VAR
+VAR
+	IN_MIN:REAL := 0;			(* minimum input value *)
+	IN_MAX:REAL := 1;			(* maximum input value *)
+	OUT_MIN:REAL := 0.2;		(* corresponding minimum output value *)
+	OUT_MAX:REAL  := 1;		(* corresponding maximum output value *)
+	Diff: REAL;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+	Diff := IN_MAX-IN_MIN;
+	Transfer_To_2_10B := (IN-IN_MIN)/Diff * (OUT_MAX-OUT_MIN) + OUT_MIN;
+END_FUNCTION
