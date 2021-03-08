@@ -9,7 +9,6 @@ VAR_INPUT
 	reValuePosition : REAL; (*Потенциометр*)
 	intPointer : INT; (*Точки задание на открытие*)
 	Start:BOOL;
-	Stop:BOOL;
 	Reset:BOOL;
 	Set:BOOL;
 END_VAR
@@ -957,14 +956,7 @@ VAR
 	setTemp : INT;
 	Error: BYTE;
 	ton1:INT;
-	ton2:INT;
-	ton3:INT;
 
-	reHeating1_Old : INT;
-	reHeating2_Old : INT;
-	test : BOOL;
-	ON_OFF_HIST_REG_1 : ON_OFF_HIST_REG;
-	ON_OFF_HIST_REG_2 : ON_OFF_HIST_REG;
 END_VAR
 (* @END_DECLARATION := '0' *)
 
@@ -1439,14 +1431,15 @@ CASE scrn OF															(*выбор окон*)
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Текущая мощность' , row4:='Задание=', mode:= mode, sp1:= CurrentPower);
 		IF mode=1 AND trgr.0 THEN IF key_up THEN CurrentPower:=CurrentPower+1; ELSIF key_down THEN CurrentPower:=CurrentPower-1; END_IF; END_IF;
 	163:
-		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Заслонка воздуха' , row4:='/-/ R=     Om /+/', mode:= mode, sp2:= AirValveFB);
-		IF mode=1 AND trgr.0 THEN bOut_Air_more:=key_up; bOut_Air_less:=key_down; END_IF;
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Заслонка воздуха' , row4:='/-/ R=     Om /+/', mode:= mode, sp1:= AirValveFB);
+			IF mode=1 AND trgr.0 THEN IF key_up THEN bOut_Air_moreMode:=TRUE; bOut_Air_lessMode:=FALSE;
+			ELSIF key_down THEN bOut_Air_moreMode:=FALSE; bOut_Air_lessMode:=TRUE; END_IF; END_IF;
 	164:
-		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Регулятор топлива' , row3:=' Задание =  ', row4:='Отк проц =   ', sp1:= REAL_TO_INT (reReg_set_0_10), sp2:= REAL_TO_INT (reOil_Valve_AI1) , mode:= mode);
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Регулятор топлива' , row3:='Set=   ', row4:='Отк проц =   ', sp1:= REAL_TO_INT (reReg_set_0_10*100), sp2:= REAL_TO_INT (reOil_Valve_AI1) , mode:= mode);
 		IF mode=1 AND trgr.0 THEN IF key_up THEN reReg_set_0_10:=reReg_set_0_10+0.02; ELSIF key_down THEN reReg_set_0_10:=reReg_set_0_10-0.02; END_IF; END_IF;
 	165:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Пуск вентилятора' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(FunStart));
-		IF mode=1 AND trgr.0 THEN IF key_up THEN FunStart:=TRUE; ELSIF key_down THEN FunStart:=FALSE; END_IF; END_IF;
+		IF mode=1 AND trgr.0 THEN IF key_up THEN FunStartMode:=TRUE; ELSIF key_down THEN FunStartMode:=FALSE; END_IF; END_IF;
 	166:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Клапан NC Y1' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(bOut_ValueY1_NC));
 		IF mode=1 AND trgr.0 THEN IF key_up THEN bOut_ValueY1_NC:=TRUE; ELSIF key_down THEN bOut_ValueY1_NC:=FALSE; END_IF; END_IF;
@@ -1850,7 +1843,6 @@ DAirValve(
 	reValuePosition:= AirValveFB_prph,
 	intPointer:= reDAirValve_Open,
 	Start:= bDAirValve_Start,
-	Stop:= ,
 	Reset:=FaultReset ,
 	Set:=  TRUE, (*Запустит одновреммено с венилятором*)
 	bValueMore=> bOut_Air_more,
@@ -1861,8 +1853,8 @@ DAirValve(
 (*Запись в модуль*)
 Modbus_prph.0:= bOut_ValueY1_NC;
 Modbus_prph.1:= bOut_ValueY2_NO;
-Modbus_prph.2:= bOut_Air_more; (*Воздушный клапан добавть*)
-Modbus_prph.3:=bOut_Air_less;	 (*Воздушный клапан убавить*)
+Modbus_prph.2:= bOut_Air_more OR bOut_Air_moreMode; (*Воздушный клапан добавть*)
+Modbus_prph.3:=bOut_Air_less OR bOut_Air_lessMode;	 (*Воздушный клапан убавить*)
 Modbus_prph.4:=GasRegUp; (*Неиспользуется*)
 Modbus_prph.5:=GasRegDown; (*Неиспользуется*)
 Modbus_prph.6:=FALSE;(*насос*) (*Неиспользуется*)
@@ -2913,6 +2905,8 @@ VAR_GLOBAL
 
 	ControOil : BYTE; (*Выбор топлива*)
 	FunStartMode : BOOL; (*Запуск вентилятора в ручном режиме*)
+	bOut_Air_moreMode : BOOL; (*Запуск в ручном режиме*)
+	bOut_Air_lessMode : BOOL; (*Запуск в ручном режиме*)
 	DHeating_Oil_bStart : BOOL;
 	setTempOil : INT;
 	intOil1_set : INT;
@@ -2993,8 +2987,7 @@ VAR_GLOBAL RETAIN
 	HeaterTemperatureRegP:INT:=30;
 	HeaterTemperatureRegI:INT:=30;
 	HeaterTemperatureRegD:INT:=10;
-	HeaterTemperatureRegDB: REAL := 1.0;
-	HeaterTemperatureRegTOF: INT := 3000;
+
 	HeatTemperatureOff: INT := 80;
 
 	intHeater_Oil1_set : INT := 50; (*Температура нефти*)
