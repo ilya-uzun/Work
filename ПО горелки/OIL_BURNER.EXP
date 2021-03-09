@@ -2928,18 +2928,7 @@ VAR_GLOBAL RETAIN
 	AirValveFaultTime: BYTE := 35;
 	AirValveSetPointMax: INT := 100;
 	AirValveSetPointMin: INT := 0;
-	(*FunPressureHH: INT := 3100;
-	FunPressureH: INT := 1700;
-	FunPressureL: INT := 500;
-	FunPressureLL: INT := -100;
-	FunPressureMax: INT;
-	FunPressureMin: INT; *)
-	FunDelayTimeForCheking: INT := 30;
-	GasValvePressureHH: INT := 15000;
-	GasValvePressureH: INT := 14000;
-	GasValvePressureL: INT := -25;
-	GasValvePressureLL: INT := -30;
-	GasValveDelayTime:BYTE := 5;
+
 	GasValvePressureMax: INT;
 	GasValvePressureMin: INT;
 	AirValveStartSP: INT := 75;
