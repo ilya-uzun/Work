@@ -38,6 +38,12 @@ VAR
 	StartTP_AirMore:BOOL;
 	StartTP_AirLess:BOOL;
 	intValuePosition_Old : INT:=1;
+
+	timePulse :TIME := t#1s;
+	PULSE_More : PULSE_T;
+	PULSE_Less : PULSE_T;
+	ResetPULSE_More : BOOL;
+	ResetPULSE_Less : BOOL;
 END_VAR
 (* @END_DECLARATION := '0' *)
 
@@ -80,18 +86,38 @@ IF set  (*AND NOT Error.1 *) THEN
 			time_OldMore :=  DINT_TO_TIME(time_Old3);
 			StartTP_AirMore :=  TRUE;
 			StartTP_AirLess :=  FALSE;
+			ResetPULSE_More := FALSE;
+			StartTP_AirLess := TRUE;
 		ELSIF time_Old2 > 0 THEN
 			time_OldLess :=  DINT_TO_TIME(time_Old2);
 			StartTP_AirLess :=  TRUE;
 			StartTP_AirMore :=  FALSE;
+			ResetPULSE_More := TRUE;
+			StartTP_AirLess := FALSE;
 		END_IF
 ELSE
 	StartTP_AirMore :=  FALSE;
 	StartTP_AirLess :=  FALSE;
 END_IF
 
+PULSE_More(
+	IN:= StartTP_AirMore,
+	T1:= timePulse,
+	T2:= time_OldMore,
+	RST:= ResetPULSE_More,
+	Q=> bValueMore);
+
+
+PULSE_Less(
+	IN:= StartTP_AirLess,
+	T1:= timePulse,
+	T2:= time_OldLess,
+	RST:= ResetPULSE_Less,
+	Q=> bValueLess);
+
+(*
 TP_AirMore(IN:=StartTP_AirMore, PT:= time_OldMore, Q=> bValueMore, ET=> );
-TP_AirLess(IN:=StartTP_AirLess, PT:= time_OldLess, Q=> bValueLess, ET=> );
+TP_AirLess(IN:=StartTP_AirLess, PT:= time_OldLess, Q=> bValueLess, ET=> ); *)
 
 
 
@@ -849,175 +875,6 @@ END_FUNCTION_BLOCK
 (* @PATH := '\/Drivers' *)
 (* @OBJECTFLAGS := '0, 8' *)
 (* @SYMFILEFLAGS := '2048' *)
-FUNCTION_BLOCK DriverMessage
-
-VAR_INPUT
-	GasRegValveErrors:BYTE;
-	GasRegValveWarnings:BYTE;
-	AirRegValveErrors:BYTE;
-	AirRegValveWarnings:BYTE;
-	GasValveErrors:BYTE;
-	GasValveWarnings:BYTE;
-	FunErrors:BYTE;
-	FunWarnings:BYTE;
-	BurnerErrors:BYTE;
-	BurnerWarnings:BYTE;
-	Err_AI1: BYTE;
-	Err_AI2: BYTE;
-	Err_AI3: BYTE;
-	Err_AI4: BYTE;
-	Err_AI5: BYTE;
-	Err_AI6: BYTE;
-	Err_AI8: BYTE;
-	Err_DriversHeating: BYTE;
-	FaultReset:BOOL;
-END_VAR
-
-VAR_OUTPUT
-	NumberMessage:BYTE;
-	health:BOOL;
-	ShutDown:BOOL;
-	Alarm:BOOL;
-	Warning:BOOL;
-END_VAR
-
-VAR
-	healthOld:BOOL;
-	trgr:BYTE;
-	i: BYTE;
-	j: BYTE;
-	k:BYTE;
-END_VAR
-(* @END_DECLARATION := '0' *)
-
-Health:=GasRegValveErrors=0 AND AirRegValveErrors=0 AND GasValveErrors=0 AND FunErrors=0 AND BurnerErrors=0;
-trgr.0:=Health<>HealthOld;
-HealthOld:=Health;
-
-IF trgr.0 OR FaultReset THEN
-	IF GasRegValveErrors.0 THEN NumberMessage:=1;
-	ELSIF GasRegValveErrors.1 THEN NumberMessage:=2;
-	ELSIF BurnerErrors.3 THEN NumberMessage:=19;
-	ELSIF AirRegValveErrors.1 THEN NumberMessage:=3;
-	ELSIF GasValveErrors.0 THEN NumberMessage:=5;
-	ELSIF GasValveErrors.1 THEN NumberMessage:=6;
-	ELSIF GasValveErrors.2 THEN NumberMessage:=7;
-	ELSIF GasValveWarnings.1 THEN NumberMessage:=8;
-	ELSIF GasValveWarnings.2 THEN NumberMessage:=9;
-	ELSIF FunErrors.0 THEN NumberMessage:=11;
-	ELSIF FunErrors.1 THEN NumberMessage:=12;
-	ELSIF FunWarnings.0 THEN NumberMessage:=10;
-	ELSIF FunWarnings.1 THEN NumberMessage:=13;
-	ELSIF FunWarnings.2 THEN NumberMessage:=14;
-	ELSIF BurnerErrors.0 THEN NumberMessage:=15;
-	ELSIF BurnerErrors.1 THEN NumberMessage:=16;
-	ELSIF BurnerErrors.2 THEN NumberMessage:=17;
-	ELSIF GasValveErrors.3 THEN  NumberMessage:=18;
-	ELSIF (Err_AI1 >= 6)  THEN NumberMessage:=20;
-	ELSIF (Err_AI2>= 6)   THEN NumberMessage:=21;
-	ELSIF (Err_AI3>= 6)   THEN NumberMessage:=22;
-	ELSIF (Err_AI4>= 6)  THEN NumberMessage:=23;
-	ELSIF (Err_AI5>= 6)  THEN NumberMessage:=24;
-	ELSIF (Err_AI6>= 6)  THEN NumberMessage:=25;
-	ELSIF (Err_AI8>= 6)  THEN NumberMessage:=26;
-	ELSIF Err_DriversHeating.1 THEN NumberMessage:=31;
-	ELSIF Err_DriversHeating.2 THEN NumberMessage:=32;
-	ELSE NumberMessage:=0;
-	END_IF;
-END_IF
-END_FUNCTION_BLOCK
-
-
-(* @NESTEDCOMMENTS := 'Yes' *)
-(* @PATH := '\/Drivers' *)
-(* @OBJECTFLAGS := '0, 8' *)
-(* @SYMFILEFLAGS := '2048' *)
-FUNCTION_BLOCK DriversHeating_Oil
-VAR_INPUT
-	bStart : BOOL;
-	Reset : BOOL;
-	intSetTempOil : INT; (*задание темперауры*)
-	reTempOilReturn : REAL; (*Температура топлива на обратке*)
-	reHeating1: REAL; (*Температура наревателя 1*)
-	reHeating2: REAL; (*Температура наревателя 2 ?? тампература клапанов*)
-	byErrorTempOilReturn : BYTE; (*Ошибка датчка Температура топлива на обратке*)
-	byErrorHeating1: BYTE; (* Ошибка датчка  Температура наревателя 1*)
-	byErrorHeating2: BYTE; (* Ошибка датчка  Температура наревателя 2*)
-
-
-END_VAR
-VAR_OUTPUT
-
-	bHeatingValve : BOOL; (*Вкл. обогрев топливного клапана*)
-	bHeatingOil : BOOL; (*Вкл. обогрев топлива*)
-
-END_VAR
-VAR
-	setTemp : INT;
-	Error: BYTE;
-	ton1:INT;
-
-END_VAR
-(* @END_DECLARATION := '0' *)
-
-IF Reset AND Error<>0 THEN Error:=0;  ton1:=0;  END_IF;
-
-(*Контроль аварии датчков*)
-IF (byErrorTempOilReturn >= 6) OR (byErrorHeating1 >= 6)  OR (byErrorHeating2 >= 6) THEN
-	Error.0 := TRUE;
-ELSE
-	Error.0 := FALSE;
-END_IF;
-
-(*Высокая температура топливного нагревателя*)
-IF reHeating1 > 100 THEN
-	Error.1 := TRUE;
-ELSE
-	Error.1 := FALSE;
-END_IF;
-
-(*Высокая температура попливного нагревателя*)
-IF reHeating2 > 100 THEN
-	Error.2 := TRUE;
-ELSE
-	Error.2 := FALSE;
-END_IF;
-
-(*Неисправность нагревателя 1*)
-(*Подумать*)
-(*
-IF  bStart AND bHeatingOil THEN
-		IF ton2 < 500 THEN
-			ton2:=ton2+1;
-		ELSE
-			Error.1:=TRUE;
-		END_IF;
-ELSE ton2:=0;
-END_IF;  *)
-
-(*Настройки нефть*)
-IF bStart AND  (Error <= 0) THEN
-
-		IF reTempOilReturn < intSetTempOil THEN
-				bHeatingOil := TRUE;
-		END_IF;
-
-		(*Нагрев клапанов*)
-		IF reTempOilReturn < intSetTempOil THEN
-				bHeatingValve := TRUE;
-		END_IF;
-
-ELSE
-	bHeatingOil := FALSE;
-	bHeatingValve := FALSE;
-END_IF;
-END_FUNCTION_BLOCK
-
-
-(* @NESTEDCOMMENTS := 'Yes' *)
-(* @PATH := '\/Interface' *)
-(* @OBJECTFLAGS := '0, 8' *)
-(* @SYMFILEFLAGS := '2048' *)
 FUNCTION_BLOCK DriverHMI
 VAR_INPUT
 END_VAR
@@ -1536,6 +1393,311 @@ IF key_f3 AND trgr.0 THEN FaultReset:=TRUE; END_IF;
 lds_prph.5:=FlameSensorState;
 
 END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Drivers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriverMessage
+
+VAR_INPUT
+	GasRegValveErrors:BYTE;
+	GasRegValveWarnings:BYTE;
+	AirRegValveErrors:BYTE;
+	AirRegValveWarnings:BYTE;
+	GasValveErrors:BYTE;
+	GasValveWarnings:BYTE;
+	FunErrors:BYTE;
+	FunWarnings:BYTE;
+	BurnerErrors:BYTE;
+	BurnerWarnings:BYTE;
+	Err_AI1: BYTE;
+	Err_AI2: BYTE;
+	Err_AI3: BYTE;
+	Err_AI4: BYTE;
+	Err_AI5: BYTE;
+	Err_AI6: BYTE;
+	Err_AI8: BYTE;
+	Err_DriversHeating: BYTE;
+	FaultReset:BOOL;
+END_VAR
+
+VAR_OUTPUT
+	NumberMessage:BYTE;
+	health:BOOL;
+	ShutDown:BOOL;
+	Alarm:BOOL;
+	Warning:BOOL;
+END_VAR
+
+VAR
+	healthOld:BOOL;
+	trgr:BYTE;
+	i: BYTE;
+	j: BYTE;
+	k:BYTE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+Health:=GasRegValveErrors=0 AND AirRegValveErrors=0 AND GasValveErrors=0 AND FunErrors=0 AND BurnerErrors=0;
+trgr.0:=Health<>HealthOld;
+HealthOld:=Health;
+
+IF trgr.0 OR FaultReset THEN
+	IF GasRegValveErrors.0 THEN NumberMessage:=1;
+	ELSIF GasRegValveErrors.1 THEN NumberMessage:=2;
+	ELSIF BurnerErrors.3 THEN NumberMessage:=19;
+	ELSIF AirRegValveErrors.1 THEN NumberMessage:=3;
+	ELSIF GasValveErrors.0 THEN NumberMessage:=5;
+	ELSIF GasValveErrors.1 THEN NumberMessage:=6;
+	ELSIF GasValveErrors.2 THEN NumberMessage:=7;
+	ELSIF GasValveWarnings.1 THEN NumberMessage:=8;
+	ELSIF GasValveWarnings.2 THEN NumberMessage:=9;
+	ELSIF FunErrors.0 THEN NumberMessage:=11;
+	ELSIF FunErrors.1 THEN NumberMessage:=12;
+	ELSIF FunWarnings.0 THEN NumberMessage:=10;
+	ELSIF FunWarnings.1 THEN NumberMessage:=13;
+	ELSIF FunWarnings.2 THEN NumberMessage:=14;
+	ELSIF BurnerErrors.0 THEN NumberMessage:=15;
+	ELSIF BurnerErrors.1 THEN NumberMessage:=16;
+	ELSIF BurnerErrors.2 THEN NumberMessage:=17;
+	ELSIF GasValveErrors.3 THEN  NumberMessage:=18;
+	ELSIF (Err_AI1 >= 6)  THEN NumberMessage:=20;
+	ELSIF (Err_AI2>= 6)   THEN NumberMessage:=21;
+	ELSIF (Err_AI3>= 6)   THEN NumberMessage:=22;
+	ELSIF (Err_AI4>= 6)  THEN NumberMessage:=23;
+	ELSIF (Err_AI5>= 6)  THEN NumberMessage:=24;
+	ELSIF (Err_AI6>= 6)  THEN NumberMessage:=25;
+	ELSIF (Err_AI8>= 6)  THEN NumberMessage:=26;
+	ELSIF Err_DriversHeating.1 THEN NumberMessage:=31;
+	ELSIF Err_DriversHeating.2 THEN NumberMessage:=32;
+	ELSE NumberMessage:=0;
+	END_IF;
+END_IF
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Drivers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriversHeating_Oil
+VAR_INPUT
+	bStart : BOOL;
+	Reset : BOOL;
+	intSetTempOil : INT; (*задание темперауры*)
+	reTempOilReturn : REAL; (*Температура топлива на обратке*)
+	reHeating1: REAL; (*Температура наревателя 1*)
+	reHeating2: REAL; (*Температура наревателя 2 ?? тампература клапанов*)
+	byErrorTempOilReturn : BYTE; (*Ошибка датчка Температура топлива на обратке*)
+	byErrorHeating1: BYTE; (* Ошибка датчка  Температура наревателя 1*)
+	byErrorHeating2: BYTE; (* Ошибка датчка  Температура наревателя 2*)
+
+
+END_VAR
+VAR_OUTPUT
+
+	bHeatingValve : BOOL; (*Вкл. обогрев топливного клапана*)
+	bHeatingOil : BOOL; (*Вкл. обогрев топлива*)
+
+END_VAR
+VAR
+	setTemp : INT;
+	Error: BYTE;
+	ton1:INT;
+
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+IF Reset AND Error<>0 THEN Error:=0;  ton1:=0;  END_IF;
+
+(*Контроль аварии датчков*)
+IF (byErrorTempOilReturn >= 6) OR (byErrorHeating1 >= 6)  OR (byErrorHeating2 >= 6) THEN
+	Error.0 := TRUE;
+ELSE
+	Error.0 := FALSE;
+END_IF;
+
+(*Высокая температура топливного нагревателя*)
+IF reHeating1 > 100 THEN
+	Error.1 := TRUE;
+ELSE
+	Error.1 := FALSE;
+END_IF;
+
+(*Высокая температура попливного нагревателя*)
+IF reHeating2 > 100 THEN
+	Error.2 := TRUE;
+ELSE
+	Error.2 := FALSE;
+END_IF;
+
+(*Неисправность нагревателя 1*)
+(*Подумать*)
+(*
+IF  bStart AND bHeatingOil THEN
+		IF ton2 < 500 THEN
+			ton2:=ton2+1;
+		ELSE
+			Error.1:=TRUE;
+		END_IF;
+ELSE ton2:=0;
+END_IF;  *)
+
+(*Настройки нефть*)
+IF bStart AND  (Error <= 0) THEN
+
+		IF reTempOilReturn < intSetTempOil THEN
+				bHeatingOil := TRUE;
+		END_IF;
+
+		(*Нагрев клапанов*)
+		IF reTempOilReturn < intSetTempOil THEN
+				bHeatingValve := TRUE;
+		END_IF;
+
+ELSE
+	bHeatingOil := FALSE;
+	bHeatingValve := FALSE;
+END_IF;
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Drivers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK PULSE_T
+VAR_INPUT
+	IN : BOOL;
+	T1 : TIME;
+	T2 : TIME;
+	RST : BOOL;
+END_VAR
+VAR_OUTPUT
+	Q : BOOL;
+END_VAR
+VAR
+	init: BOOL;
+	last: TIME;
+	tx: TIME;
+	edge: BOOL;
+END_VAR
+
+
+(*
+version 1.0	15. jul. 2008
+programmer 	hugo
+tested by	oscat
+
+PULSE_T generates a pulse of length T2 if the input pulse is shorter than T1.
+if the input pulse is longer than T1, the output follows the input.
+and rising edge on in will kill a possible output pulse and generate a new pulse instead.
+
+*)
+(* @END_DECLARATION := '0' *)
+tx := DWORD_TO_TIME(T_PLC_MS());
+IF NOT init THEN
+	init := TRUE;
+	last := tx;
+ELSIF RST THEN
+	(* asynchronous reset *)
+	Q := FALSE;
+ELSIF IN AND NOT edge AND NOT Q THEN
+	(* a rising edge on in will reversre the output status, if new pulse is startet the start time is stored in last *)
+	last := tx;
+	Q := TRUE;
+ELSIF NOT IN AND edge AND ((tx - last) > T1) THEN
+	(* a falling edge on IN will clear the output if in was high for more then T1 *)
+	Q := FALSE;
+ELSIF (tx - last) >= T2 THEN
+	(* timeout for long pulse if second click did not occur or in stays high *)
+	Q := FALSE;
+END_IF;
+
+edge := IN;
+
+(* revision histroy
+hm	15. jul. 2008	rev 1.0
+	original release
+
+
+*)	
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Fun' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION T_PLC_MS : DWORD
+VAR CONSTANT
+	debug : BOOL := 0;
+	N : INT := 0;
+	offset : DWORD := 0;
+END_VAR
+VAR
+	tx : TIME;
+END_VAR
+
+(*
+version 1.2	16. nov 2008
+programmer 	hugo
+tested by	oscat
+
+T_PLC_MS reads the internal PLC timer and return the time, it has the advantage to be able to set a debug mode 
+and speed up the counter to test the plc timer overrun which occurs every 50 days respectively 25 days at siemens S7
+this routine also allows to correct the behavior of s7 where the internal plc counter will not count all 32 bits.
+
+*)
+(* @END_DECLARATION := '0' *)
+tx := TIME();
+T_PLC_MS := TIME_TO_DWORD(Tx);
+(* hier muss die korrektur fьr step7 stattfinden
+plctime muss den vollen wertebereich von time ausnutzen:
+wenn bei step7 time -24tage bis plus 24 tage ist dann muss der timer auch beim ьberlauf auf -24tage springen 
+und auf keinen fall auf 0 !!!!
+fьr siemens muss ein weiterer fb im main eingebunden werden der sicherstellt das alle 32 bits durchgezдhlt werden.
+es kann nur ein fb sein den er muss sich das oberste (32te) bit merken.
+oder etwa spring s7 bei ьberlauf auf -24 tage????? dann wдre keine korrektur nцtig.
+*)
+IF debug THEN
+	T_PLC_MS := (SHL(T_PLC_MS,N) OR SHL(DWORD#1,N)-1) + OFFSET;
+END_IF;
+
+(* revision history
+hm	14.9.2007	rev 1.0
+	original version
+
+hm	12. nov 2007	rev 1.1
+	added temporaray variable tx because some compilers could not handle time() as an argument
+
+hm	16. nov. 2008	rev 1.2
+	initialized constants with 0 for compatibility reasons
+*)
+END_FUNCTION
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Fun' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION Transfer_To_2_10B : REAL
+VAR_INPUT
+	IN: REAL;				(* input value*)
+END_VAR
+VAR
+	IN_MIN:REAL := 0;			(* minimum input value *)
+	IN_MAX:REAL := 1;			(* maximum input value *)
+	OUT_MIN:REAL := 0.2;		(* corresponding minimum output value *)
+	OUT_MAX:REAL  := 1;		(* corresponding maximum output value *)
+	Diff: REAL;
+END_VAR
+(* @END_DECLARATION := '0' *)
+	Diff := IN_MAX-IN_MIN;
+	Transfer_To_2_10B := (IN-IN_MIN)/Diff * (OUT_MAX-OUT_MIN) + OUT_MIN;
+END_FUNCTION
 
 
 (* @NESTEDCOMMENTS := 'Yes' *)
@@ -2313,27 +2475,6 @@ Burner();  *)
 	(*IF FaultReset THEN FaultReset:=FALSE; END_IF; *)
 END_IF;
 END_PROGRAM
-
-
-(* @NESTEDCOMMENTS := 'Yes' *)
-(* @PATH := '' *)
-(* @OBJECTFLAGS := '0, 8' *)
-(* @SYMFILEFLAGS := '2048' *)
-FUNCTION Transfer_To_2_10B : REAL
-VAR_INPUT
-	IN: REAL;				(* input value*)
-END_VAR
-VAR
-	IN_MIN:REAL := 0;			(* minimum input value *)
-	IN_MAX:REAL := 1;			(* maximum input value *)
-	OUT_MIN:REAL := 0.2;		(* corresponding minimum output value *)
-	OUT_MAX:REAL  := 1;		(* corresponding maximum output value *)
-	Diff: REAL;
-END_VAR
-(* @END_DECLARATION := '0' *)
-	Diff := IN_MAX-IN_MIN;
-	Transfer_To_2_10B := (IN-IN_MIN)/Diff * (OUT_MAX-OUT_MIN) + OUT_MIN;
-END_FUNCTION
 
 (* @PATH := '' *)
 
