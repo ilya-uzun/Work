@@ -1,0 +1,28 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK FixButton (*Фиксация кнопки  и сброс при повторном нажатии*)
+VAR_INPUT
+	bIN : BOOL;
+END_VAR
+VAR_OUTPUT
+	bQ: BOOL;
+END_VAR
+VAR
+	Rt : R_TRIG;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+	Rt(CLK := bIN );
+
+	IF Rt.q THEN
+		IF NOT bQ THEN
+			bQ := 1;
+		ELSE
+			bQ := 0;
+		END_IF
+	END_IF
+
+END_FUNCTION_BLOCK
