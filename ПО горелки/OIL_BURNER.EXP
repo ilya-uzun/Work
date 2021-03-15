@@ -190,16 +190,23 @@ VAR
 	k: BYTE;
 	ControlStateOld:INT;
 
-	Transfer_Om_FB : REAL; (*проценты от воздушной заслонки*)
+
 (*Счётчик продувки 36 с*)
 	T_36s : TON;
 	bT_36s_IN: BOOL;
-	timeT_36s : TIME := T#3s;
+	timeT_36s : TIME := T#36s;
 	bT_36s_OUT: BOOL;
+
 	T_Gen : TON; (*время работы искры*)
 	bT_Gen_IN: BOOL;
 	timeT_Gen  : TIME := T#10s;
 	bT_Gen_OUT: BOOL;
+
+	T_SFlame : TON; (*время работы искры*)
+	bT_SFlam_IN: BOOL;
+	timeT_SFlam  : TIME := T#5s;
+	bT_SFlam_OUT: BOOL;
+
 	Alarms: ARRAY [1..33] OF BOOL;
 	(* in*)
 	FuelValve_pos: REAL;
@@ -319,10 +326,10 @@ T2.PT := DWORD_TO_TIME(Set_Ala2Time);
 T6.PT := DWORD_TO_TIME(Set_AirValveRegTime);
 T7.PT :=  t#10s ; (*Время работы искры*)
 T8.PT := DWORD_TO_TIME(Set_Ala15Time);
-T11.PT :=  t#25s ; (*Время продувки при вынужденом останову*)
+T11.PT :=  t#36s ; (*Время продувки при вынужденом останову*)
 T103.PT := DWORD_TO_TIME(Set_StartVentTime);
-T111.PT := t#15s; (* Время стабилизации пламени*)
-T200.PT :=   t#25s ; (*Время вентиляции при останове*)
+T111.PT := t#5s; (* Время стабилизации пламени*)
+T200.PT :=   t#36s ; (*Время вентиляции при останове*)
 
 
 (*** INPUTS ******************************************************************************************************************************)
@@ -333,7 +340,6 @@ AirPress := AirPress_val * Set_AirPressRange / 100; (*Масштаб 0..100 в Па*)
 FuelFlow := FuelFlow_val * Set_FuelFlowRange / 100; (*Масштаб 0..100 в м3/ч*);  *)
 
 			(*Масштабирование входов c приводов*)
-Transfer_Om_FB := Transfer_Om(AirValveFB_prph_FB);
 (*
 FuelValveScaleInF(
 	IN := FuelValve_pos,
@@ -394,9 +400,9 @@ IF Mode = 4 THEN;
 			ValveY3_FB:=1; (*Включение клапана топлива*)
 			 FuelValve_setpos  := 70; (*процент открытия топливного регулятора*)
 			 AirValve_setpos := 1; (*процент открытия воздушной заслонки*)
-			bDriversValveAir_FB := TRUE;
+
 				(*Условие для запуска вентилятора воз заслока закрыта регулятор открыт*)
-			IF (Transfer_Om_FB <= 20) THEN (*Запустить если заслонка закрыта *)
+			IF (AirValveFB_prph_FB <= 20) THEN (*Запустить если заслонка закрыта *)
 				bDriversFun_FB := 1;
 			END_IF
 				(*продолжаем работу вентилятора и переходим к продувке*)
@@ -406,15 +412,14 @@ IF Mode = 4 THEN;
 		2:   (*Продувка 36 сек, открытие заслонки воздуха и закрытие регулятора топлива *)
 			 FuelValve_setpos  := 30; (*процент открытия топливного регулятора*)
 			 AirValve_setpos := 100; (*процент открытия воздушной заслонки*)
-			bT_36s_IN := 1; (*Включаем счётчик*)
+			bT_36s_IN := TRUE; (*Включаем счётчик*)
+			bDriversFun_FB:= TRUE;
 			T_36s(
 				IN:= bT_36s_IN,
 				PT:= timeT_36s,
 				Q=> bT_36s_OUT);
 				(* Переход *)
-			IF  bT_36s_OUT THEN
-				bDriversFun_FB:= 1;
-				bT_36s_IN := 0; (*Выключаем счётчик*)
+			IF  bT_36s_OUT AND  (AirValveFB_prph_FB > 90 )THEN
 				FuelValve_setpos  := 65; (*процент открытия топливного регулятора*)
 				AirValve_setpos := 0; (*процент открытия воздушной заслонки*)
 				Stage := 3;
@@ -422,6 +427,7 @@ IF Mode = 4 THEN;
 
 		3:	(*Прогрев*)
 				(*Задание температуры для DHeating_Oil*)
+
 				IF ControOil_FB = 0 THEN
 					setTempOil := intHeater_Oil1_set_FB; (*Присвоить уставку температуры нефти*)
 				ELSIF ControOil_FB = 1 THEN
@@ -440,17 +446,19 @@ IF Mode = 4 THEN;
 			IF byControOil = 0 THEN
 				FuelValve_setpos := SetOilHeavyIgnition_FB;
 				AirValve_setpos := SetAirHeavyIgnition_FB;
+					IF (reOil_Valve_AI1_FB + 3 >= SetOilHeavyIgnition_FB) AND (AirValveFB_prph_FB <= SetAirHeavyIgnition_FB + 20) THEN  (* -5 погрешность заслоки*)
+						Stage :=5; END_IF;
+
 			ELSIF byControOil = 1 THEN
 				FuelValve_setpos := SetOilEasyIgnition_FB;
 				AirValve_setpos := SetAirEasyIgnition_FB;
-			END_IF
-
-			IF (reOil_Valve_AI1_FB + 3 >= SetOilHeavyIgnition_FB) AND (Transfer_Om_FB <= SetAirEasyIgnition_FB + 20) THEN  (* -5 погрешность заслоки*)
-				Stage :=5; END_IF;
+					IF (reOil_Valve_AI1_FB + 3 >= SetOilEasyIgnition_FB) AND (AirValveFB_prph_FB <= SetAirEasyIgnition_FB + 20)
+					THEN  (* -5 погрешность заслоки*)
+				Stage :=5; END_IF
+			END_IF;
 
 		5:
 			SparkGen :=TRUE;						(*Включение трансформатора*)
-
 			ValveY1_FB:=TRUE;
 			ValveY2_FB:=TRUE;
 			bT_Gen_IN := TRUE;
@@ -459,14 +467,17 @@ IF Mode = 4 THEN;
 				PT:= timeT_Gen,
 				Q=> bT_Gen_OUT);
 			IF bT_Gen_OUT THEN Stage :=6;  END_IF;
-
 		6:
 			SparkGen := FALSE;
-			bControlFlame := TRUE;
-			bT_Gen_IN := FALSE;
-			T111(IN:=1);
-			IF T111.Q THEN (*Стабилизация пламени*)
-				bControlFlame := FALSE;
+
+			bT_SFlam_IN:= TRUE;
+			T_SFlame(
+				IN:= bT_SFlam_IN,
+				PT:= timeT_Gen,
+				Q=> bT_SFlam_OUT);
+
+			(*T111(IN:=1); *)
+			IF bT_Gen_OUT THEN (*Стабилизация пламени*)
 				SetPower := 1;				(*Установка минимальной мощности*)
 				Power := 1;
 				Mode := 5;
@@ -600,7 +611,7 @@ IF mode = 6 THEN
 	FuelValve_setpos  := 0; (*процент открытия топливного регулятора*)
 	AirValve_setpos := 100; (*процент открытия воздушной заслонки*)
 	bDriversFun_FB:=1;
-
+	T200(IN:=1);
 	IF T200.Q THEN
 		bDriversFun_FB:=0;
 		Mode:=3;
@@ -609,6 +620,7 @@ END_IF;
 
 (*** Режим СТОП --------------------------------------------------------------*)
 IF mode=3 THEN
+
 	ValveY1_FB:=FALSE;
 	ValveY2_FB:=FALSE;
 	ValveY3_FB:=FALSE; (*Включение клапана топлива*)
@@ -618,6 +630,9 @@ IF mode=3 THEN
 	bDriversFun_FB :=FALSE;
 	bDriversValveAir_FB :=FALSE;
 	bDriversHeatingOil_FB :=FALSE;
+			bT_36s_IN := FALSE; (*Выключаем счётчик*)
+			bT_Gen_IN := FALSE;
+			bT_SFlam_IN := FALSE;
 END_IF;
 
 
@@ -992,9 +1007,9 @@ CASE scrn OF															(*выбор окон*)
 IF mode<>0 THEN mode:=0; END_IF; (*???*)
 
 		IF FuelSel THEN  																	(*Отображение на основном экране*)
-			spt1 := TRUNC(Burner.reOilReg_Set_FB);
+			spt1 := TRUNC(AlarmBurner.reOil_Valve_FB);
 			spt2 := TRUNC(Power);
-			spt3 := TRUNC(Burner.reAirReg_Set_FB );
+			spt3 := TRUNC(AlarmBurner.reAirValve_FB);
 			spt4 := TRUNC(Setpower);
 			Screen(row1:= tmp2, row2:='Топ=    Мощ=   ', row3:='Взд=    Уст=   ', row4:=tmp1, sp1:=spt1, sp2:=spt2, sp3:=spt3, sp4:=spt4, mode:=mode);
 ;
@@ -1636,7 +1651,7 @@ VAR
 END_VAR
 (* @END_DECLARATION := '0' *)
 	Diff := 480 / 100; (*чему равен одн процент*)
-	Transfer_Om := IN/ Diff;
+	Transfer_Om := (IN/ Diff) - 15.5; (*16 % Зделать  автамотическое определения вычета нижнй границ *)
 END_FUNCTION
 
 
@@ -1701,6 +1716,8 @@ VAR
 	byErr_AI5: BYTE; (*Ошибка канала 5 температура нагревателя 1 *)
 	byErr_AI8: BYTE; (*Ошибка канала 8 температура нагревателя 2*)
 
+	reAirValve_Om: REAL; (*Положение заслонки в омах*)
+
 	Block_1: Block_FB; (*Блокировка ошибки канала 1 *)
 	Block_2: Block_FB; (*Блокировка ошибки канала 2 *)
 	Block_3: Block_FB; (*Блокировка ошибки канала 3 *)
@@ -1758,8 +1775,8 @@ END_IF; *)
 		VALUE:= AirValveFB_prph,
 		DEF_VALUE:= 0.0,
 		_ERR=> byErr_AI2,
-		OUT_VALUE=> reAirValve_FB);
-
+		OUT_VALUE=> reAirValve_Om);
+	 reAirValve_FB:=Transfer_Om(reAirValve_Om);
 	(*Ошибка канала 3 давление топлива на обратке*)
 	DECODE_FLOA_AI3(
 		VALUE:= rePress_Oil_Return_AI3,
@@ -1796,8 +1813,8 @@ END_IF; *)
 	END_IF
 
 (*Отсутствие пламени*)
-	IF  (Stage = 6 AND NOT FlameSensor_prph )
-		OR (wMode = 5 AND NOT FlameSensor_prph) THEN
+	IF (* (Stage = 6 AND  bControlFlame AND NOT  FlameSensor_prph )
+		OR *) (wMode = 5  AND NOT  FlameSensor_prph) THEN
 		Block_8_Start := TRUE;
 	ELSE
 		Block_8_Start  := FALSE;
@@ -3044,9 +3061,9 @@ _END
 _ELEMENT
 _ID: 67
 _MACROID: -1
-_POS: 53, 19
+_POS: 52, 19
 _TYPE: _INPUT
-_TEXT: Burner.bDriversValveAir_FB
+_TEXT: TRUE
 _NEGATE: 0
 _CONNECTOR: 
 _END
@@ -3794,9 +3811,9 @@ VAR_GLOBAL RETAIN
 	intHeater_Oil2_set : INT := 10; (* 25 Температура дизеля*)
 
 	(*Параметры на розжиге*)
-	SetOilEasyIgnition :REAL := 65; (*Положение заслонки топлива на дизеле*)
+	SetOilEasyIgnition :REAL := 50; (*Положение заслонки топлива на дизеле*)
 	SetAirEasyIgnition :REAL := 5; (*Положение заслонки воздуха на дизеле*)
-	SetOilHeavyIgnition :REAL := 65; (*Положение заслонки топлива на нефти*)
+	SetOilHeavyIgnition :REAL := 50; (*Положение заслонки топлива на нефти*)
 	SetAirHeavyIgnition :REAL := 5; (*Положение заслонки  воздуха на нефти*)
 	DotsFuel: ARRAY [1..10] OF DotParams :=
 												(Fuel := 250, Air := 300, Pwr := 10),
