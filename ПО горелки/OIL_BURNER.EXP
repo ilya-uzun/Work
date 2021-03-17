@@ -564,12 +564,12 @@ IF mode=5  AND  (byControOil=1)THEN 	(*Легкое топливо*)
 		IN := DotPart,
 		OUT_MIN := DotsFuel[Dot].Fuel,
 		OUT_MAX := DotsFuel[Dot2].Fuel);
-	FuelValve_setpos := DotScaleUp.OUT / 10; (*Определили необходимое положение топл. рег-а*)
+	FuelValve_setpos := DotScaleUp.OUT; (*Определили необходимое положение топл. рег-а*)
 	DotScaleUp(
 		IN := DotPart,
 		OUT_MIN := DotsFuel[Dot].Air,
 		OUT_MAX := DotsFuel[Dot2].Air);
-	AirValve_setpos := DotScaleUp.OUT / 10; (*Определили необходимое положение возд засл.*)
+	AirValve_setpos := DotScaleUp.OUT; (*Определили необходимое положение возд засл.*)
 
 END_IF;
 
@@ -589,12 +589,12 @@ IF mode=5 AND  (byControOil=0) THEN 	(*Тяжёлое топливо*) (*ManualControl - ручно
 		IN := DotPart,
 		OUT_MIN := DotsHeavyFuel[Dot].Fuel,
 		OUT_MAX := DotsHeavyFuel[Dot+1].Fuel);
-	FuelValve_setpos := DotScaleUp.OUT / 10; (*Определили необходимое положение топл. рег-а*)
+	FuelValve_setpos := DotScaleUp.OUT; (*Определили необходимое положение топл. рег-а*)
 	DotScaleUp(
 		IN := DotPart,
 		OUT_MIN := DotsHeavyFuel[Dot].Air,
 		OUT_MAX := DotsHeavyFuel[Dot+1].Air);
-	AirValve_setpos := DotScaleUp.OUT / 10; (*Определили необходимое положение возд засл.*)
+	AirValve_setpos := DotScaleUp.OUT; (*Определили необходимое положение возд засл.*)
 
 END_IF;
 
@@ -3816,27 +3816,27 @@ VAR_GLOBAL RETAIN
 	SetOilHeavyIgnition :REAL := 50; (*Положение заслонки топлива на нефти*)
 	SetAirHeavyIgnition :REAL := 5; (*Положение заслонки  воздуха на нефти*)
 	DotsFuel: ARRAY [1..10] OF DotParams :=
-												(Fuel := 250, Air := 300, Pwr := 10),
-												(Fuel := 250, Air := 300, Pwr := 20),
-												(Fuel := 300, Air := 300, Pwr := 30),
-												(Fuel := 400, Air := 400, Pwr := 40),
-												(Fuel := 500, Air := 500, Pwr := 50),
-												(Fuel := 600, Air := 600, Pwr := 60),
-												(Fuel := 600, Air := 600, Pwr := 70),
-												(Fuel := 600, Air := 600, Pwr := 80),
-												(Fuel := 600, Air := 600,  Pwr := 90),
-												(Fuel := 600, Air := 600, Pwr := 100); (*0.1%*)
+												(Fuel := 25, Air := 30, Pwr := 10),
+												(Fuel := 25, Air := 30, Pwr := 20),
+												(Fuel := 30, Air := 30, Pwr := 30),
+												(Fuel := 40, Air := 40, Pwr := 40),
+												(Fuel := 50, Air := 50, Pwr := 50),
+												(Fuel := 60, Air := 60, Pwr := 60),
+												(Fuel := 60, Air := 60, Pwr := 70),
+												(Fuel := 60, Air := 60, Pwr := 80),
+												(Fuel := 60, Air := 60,  Pwr := 90),
+												(Fuel := 60, Air := 60, Pwr := 100); (*0.1%*)
 	DotsHeavyFuel: ARRAY [1..10] OF DotParams :=
-												(Fuel := 250, Air := 100, Pwr := 10), (*Tочка 1*)
-												(Fuel := 280, Air := 150, Pwr := 20),
-												(Fuel := 330, Air := 260, Pwr := 30),
-												(Fuel := 400, Air := 400, Pwr := 40),
-												(Fuel := 500, Air := 500, Pwr := 50),
-												(Fuel := 600, Air := 600, Pwr := 60),
-												(Fuel := 600, Air := 600, Pwr := 70),
-												(Fuel := 600, Air := 600, Pwr := 80),
-												(Fuel := 600, Air := 600, Pwr := 90),
-												(Fuel := 600, Air := 600, Pwr := 100); (*0.1%*)
+												(Fuel := 25, Air := 10, Pwr := 10), (*Tочка 1*)
+												(Fuel := 28, Air := 15, Pwr := 20),
+												(Fuel := 33, Air := 26, Pwr := 30),
+												(Fuel := 40, Air := 40, Pwr := 40),
+												(Fuel := 50, Air := 50, Pwr := 50),
+												(Fuel := 60, Air := 60, Pwr := 60),
+												(Fuel := 60, Air := 60, Pwr := 70),
+												(Fuel := 60, Air := 60, Pwr := 80),
+												(Fuel := 60, Air := 60, Pwr := 90),
+												(Fuel := 60, Air := 60, Pwr := 100); (*0.1%*)
 
 END_VAR
 (* @OBJECT_END := 'Global_Variables' *)
