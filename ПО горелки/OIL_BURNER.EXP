@@ -802,8 +802,8 @@ VAR_INPUT
 
 	Start:BOOL;
 	Reset:BOOL;
-	bPress_NC: BOOL; (*н.з. контакт от датчика давления*)
-	bPress_NO: BOOL; (*н.о. контакт от датчика давления*)
+
+
 
 END_VAR
 
@@ -818,7 +818,7 @@ VAR_OUTPUT
 END_VAR
 VAR
 	ton1:INT;
-	ton2: BYTE;
+
 	T_2s : TON;
 	bT_2s_IN: BOOL;
 	bT_2s_OUT: BOOL;
@@ -1479,7 +1479,7 @@ END_FUNCTION_BLOCK
 FUNCTION_BLOCK DriversHeating_Oil
 VAR_INPUT
 	bStart : BOOL;
-	Reset : BOOL;
+
 	intSetTempOil : INT; (*задание темперауры*)
 	reTempOilReturn : REAL; (*Температура топлива на обратке*)
 	reHeating1: REAL; (*Температура наревателя 1*)
@@ -1493,9 +1493,9 @@ VAR_OUTPUT
 
 END_VAR
 VAR
-	setTemp : INT;
+
 	Error: BYTE;
-	ton1:INT;
+
 
 END_VAR
 (* @END_DECLARATION := '0' *)
@@ -1643,10 +1643,10 @@ VAR_INPUT
 	IN: REAL;				(* input value*)
 END_VAR
 VAR
-	IN_MIN:REAL := 0;			(* minimum input value *)
-	IN_MAX:REAL := 1;			(* maximum input value *)
-	OUT_MIN:REAL := 0.2;		(* corresponding minimum output value *)
-	OUT_MAX:REAL  := 1;		(* corresponding maximum output value *)
+
+
+
+
 	Diff: REAL;
 END_VAR
 (* @END_DECLARATION := '0' *)
@@ -2305,17 +2305,10 @@ VAR
 	Exception: BYTE;
 	DataSize: WORD;
 	master1: BYTE:= 1;
-	t: DWORD;						(*переменная для организации счетчика*)
-	A: WORD := 0;					(*счетчик*)
-	x:WORD;						(*считанное значение*)
-	x1: WORD;						(*переменная для записи по сети*)
-	x2: WORD;						(*переменная для записи по сети*)
-	x3: WORD;						(*переменная для записи по сети*)
-	d:  REAL;						(*считанное значение*)
-	ptr_D:POINTER TO BYTE;
+
 	Modbus_prph:INT;
 
-	ton3 : INT;
+
 END_VAR
 (* @END_DECLARATION := '0' *)
 
@@ -2425,8 +2418,8 @@ END_PROGRAM
 PROGRAM PLC_PRG
 VAR
 
-	testAir : INT;
-	key_startTest :BOOL;
+
+
 	FixB : FixButton;
 	byModeTest : WORD;
 END_VAR
@@ -2505,19 +2498,9 @@ _INSTANCE: 1
 _INSTANCENAME: Fun
 _TYPENAME: DriverFun
 _ENENO: 0
-_INPUTS: 4
+_INPUTS: 2
 _IN
 _INPUTID: 1
-_INPUTIDX: 0
-_NEGATE: 0
-_END
-_IN
-_INPUTID: 0
-_INPUTIDX: 0
-_NEGATE: 0
-_END
-_IN
-_INPUTID: 0
 _INPUTIDX: 0
 _NEGATE: 0
 _END
@@ -2819,14 +2802,9 @@ _INSTANCE: 1
 _INSTANCENAME: DHeating_Oil
 _TYPENAME: DriversHeating_Oil
 _ENENO: 0
-_INPUTS: 6
+_INPUTS: 5
 _IN
 _INPUTID: 69
-_INPUTIDX: 0
-_NEGATE: 0
-_END
-_IN
-_INPUTID: 0
 _INPUTIDX: 0
 _NEGATE: 0
 _END
@@ -3879,17 +3857,17 @@ VAR_GLOBAL
 
 	AirValve_setpos: REAL;
 
-	GasValve_open: BOOL;
-	GasValve_close: BOOL;
 
-	FuelValveHeater: BOOL;
+
+
+
 
 	Warning: BOOL;
-	Warning_Gas: BOOL; (* внимание от режима на газу *)
-	Warning_Fuel: BOOL; (* внимание от режима на топливе *)
+
+
 
 	Drive_start: BOOL;
-	Drive_setspeed: REAL; (*%*)
+
 
 	SetPower: REAL; (*% заданное*)
 	Power: REAL; (*% текущее*)
@@ -3924,7 +3902,7 @@ VAR_GLOBAL
 
 	ADfuelAm: BYTE;   (*Кол-во активных точек*)
 	ADhfuelAm: BYTE; (*Кол-во активных точек*)
-	Siren: BOOL;
+
 (*переменные для визуализации*)
 	tStartTest:BOOL;
 	tIgniterValve:BOOL;
