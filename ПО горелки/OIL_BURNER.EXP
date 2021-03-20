@@ -8,9 +8,9 @@ FUNCTION_BLOCK DriverAirValve
 VAR_INPUT
 	reValuePosition : REAL; (*Потенциометр*)
 	intSet : INT; (*Точки задание на открытие*)
-	Start:BOOL;
-	Reset:BOOL;
-	Set:BOOL;
+	Start:BOOL :=FALSE;
+	Reset:BOOL :=FALSE;
+	Set:BOOL :=FALSE;
 END_VAR
 
 VAR_IN_OUT
@@ -25,6 +25,8 @@ END_VAR
 VAR
 	ton1:INT;
 	ton2:INT;
+	ton3:INT;
+	ton4:INT;
 	intValuePosition: INT;
 	intValuePositionNorma: INT;
 	timeTO1: TIME;
@@ -47,48 +49,56 @@ VAR
 END_VAR
 (* @END_DECLARATION := '0' *)
 (*Переводим поценты в время*)
-timeTO1:= INT_TO_TIME(intSet*350);
+
+(*IF PLCrun.Q THEN  *)
+	timeTO1:= INT_TO_TIME(intSet*350);
 
 
-IF timeTO1 <> time_Old THEN
-	time_Old2:= TIME_TO_DINT (time_Old - timeTO1); (*Запишем разницу*)
-	IF ton2 < 10 THEN
-		ton2:=ton2+1;
-		ELSE
-			time_Old := timeTO1;
-		END_IF
-END_IF
+	IF timeTO1 <> time_Old THEN
+		time_Old2:= TIME_TO_DINT (time_Old - timeTO1); (*Запишем разницу*)
+		IF ton2 < 3 THEN
+			ton2:=ton2+1;
+			ELSE
+				ton2:=0;
+				time_Old := timeTO1;
+			END_IF
+	END_IF
 
 
-IF Start  THEN
-		IF time_Old2 < 0 THEN
-			time_Old3:= time_Old2*(-1); (*избавляемся от минуса*)
-			time_OldMore :=  DINT_TO_TIME(time_Old3);
-			StartTP_AirMore :=  TRUE;
-			StartTP_AirLess :=  FALSE;
-			ResetPULSE_More := FALSE;
-		ELSIF time_Old2 > 0 THEN
-			time_OldLess :=  DINT_TO_TIME(time_Old2);
-			StartTP_AirLess :=  TRUE;
-			StartTP_AirMore :=  FALSE;
-			ResetPULSE_More := TRUE;
-		END_IF
-END_IF
+	IF Start  THEN
+			IF (time_Old2 <=  0) THEN
+					time_Old3:= time_Old2*(-1); (*избавляемся от минуса*)
+					time_OldMore :=  DINT_TO_TIME(time_Old3);
+					StartTP_AirMore :=  TRUE;
+					StartTP_AirLess :=  FALSE;
+					ResetPULSE_More := FALSE;
+					ResetPULSE_Less  := TRUE;
+			END_IF
 
-PULSE_More(
-	IN:= StartTP_AirMore,
-	T1:= timePulse,
-	T2:= time_OldMore,
-	RST:= ResetPULSE_More,
-	Q=> bValueMore);
+			IF time_Old2 >=  0 THEN
+					time_OldLess :=  DINT_TO_TIME(time_Old2);
+					StartTP_AirLess :=  TRUE;
+					StartTP_AirMore :=  FALSE;
+					ResetPULSE_More := TRUE;
+					ResetPULSE_Less  := FALSE;
+			END_IF
+			(*ELSIF notbValueMore AND NOT bValueLess THEN *)
+	END_IF
+	
+	PULSE_More(
+		IN:= StartTP_AirMore,
+		T1:= timePulse,
+		T2:= time_OldMore,
+		RST:= ResetPULSE_More,
+		Q=> bValueMore);
 
-PULSE_Less(
-	IN:= StartTP_AirLess,
-	T1:= timePulse,
-	T2:= time_OldLess,
-	RST:= ResetPULSE_Less,
-	Q=> bValueLess);
-
+	PULSE_Less(
+		IN:= StartTP_AirLess,
+		T1:= timePulse,
+		T2:= time_OldLess,
+		RST:= ResetPULSE_Less,
+		Q=> bValueLess);
+(*END_IF*)
 (*
 TP_AirMore(IN:=StartTP_AirMore, PT:= time_OldMore, Q=> bValueMore, ET=> );
 TP_AirLess(IN:=StartTP_AirLess, PT:= time_OldLess, Q=> bValueLess, ET=> ); *)
@@ -193,27 +203,27 @@ VAR
 
 (*Счётчик продувки 36 с*)
 	T_36s : TON;
-	bT_36s_IN: BOOL;
+	bT_36s_IN: BOOL :=FALSE;
 	timeT_36s : TIME := T#36s;
-	bT_36s_OUT: BOOL;
+	bT_36s_OUT: BOOL :=FALSE;
 
 	T_Gen : TON; (*время работы искры*)
-	bT_Gen_IN: BOOL;
+	bT_Gen_IN: BOOL :=FALSE;
 	timeT_Gen  : TIME := T#10s;
-	bT_Gen_OUT: BOOL;
+	bT_Gen_OUT: BOOL :=FALSE;
 
 	T_SFlame : TON; (*время работы искры*)
-	bT_SFlam_IN: BOOL;
+	bT_SFlam_IN: BOOL :=FALSE;
 	timeT_SFlam  : TIME := T#5s;
-	bT_SFlam_OUT: BOOL;
+	bT_SFlam_OUT: BOOL :=FALSE;
 
 	Alarms: ARRAY [1..33] OF BOOL;
 	(* in*)
 	FuelValve_pos: REAL;
 	SetPower_val: REAL;
-	DriveOper_st: BOOL;
-	DriveReady_st: BOOL;
-	MorePower_cmd: BOOL;
+	DriveOper_st: BOOL :=FALSE;
+	DriveReady_st: BOOL :=FALSE;
+	MorePower_cmd: BOOL :=FALSE;
 	LessPower_cmd: BOOL;
 	LeakCtrlPress_st: BOOL;
 	FuelSelHeavy_cmd: BOOL; (*Команда выбора топлива 1-тяжелое 0-легкое*)
@@ -281,17 +291,17 @@ VAR_INPUT
 END_VAR
 VAR_OUTPUT
 	(**)
-	bDriversFun_FB : BOOL; (*Запуск драйвера вентилятора*)
-	bDriversValveAir_FB  : BOOL; (*Запуск драйвера воздушной заслонки*)
-	bDriversHeatingOil_FB  : BOOL; (*Запуск драйвера нагрева топлива*)
-	ValveY1_FB : BOOL;
-	ValveY2_FB : BOOL;
-	ValveY3_FB : BOOL;
+	bDriversFun_FB : BOOL :=FALSE; (*Запуск драйвера вентилятора*)
+	bDriversValveAir_FB  : BOOL :=FALSE; (*Запуск драйвера воздушной заслонки*)
+	bDriversHeatingOil_FB  : BOOL :=FALSE; (*Запуск драйвера нагрева топлива*)
+	ValveY1_FB : BOOL :=FALSE;
+	ValveY2_FB : BOOL :=FALSE;
+	ValveY3_FB : BOOL :=FALSE;
 	reOilReg_set_FB : REAL; (*процент открытия топливного регулятора*)
 	reAirReg_Set_FB : INT;   (*процент открытия воздушной заслонки*)
 	setTempOil : INT; (*Выход задание для температуры*)
-	SparkGen : BOOL;
-	Work	: BOOL;
+	SparkGen : BOOL :=FALSE;
+	Work	: BOOL :=FALSE;
 	(*старые*)
 
 
@@ -963,8 +973,8 @@ CASE scrn OF															(*выбор окон*)
 		ELSIF  NumberMessage.5       THEN tmp2:='ВК2:ош датчика';
 		ELSIF  NumberMessage.6       THEN tmp2:='ВК3:ош датчика';
 		ELSIF  NumberMessage.7       THEN tmp2:='Пламя до запуска';  (*Пламя в топли до запуска*)
-		ELSIF  NumberMessage.8       THEN tmp2:='Нет пламени';
-		ELSIF  NumberMessage.9       THEN tmp2:='  ';
+		ELSIF  NumberMessage.8       THEN tmp2:='Нет пламени стаб';
+		ELSIF  NumberMessage.9       THEN tmp2:='Нет пламени работа';
 		ELSIF  NumberMessage.10     THEN tmp2:='  ';
 		ELSIF  NumberMessage.11     THEN tmp2:='  ';
 		ELSIF  NumberMessage.12     THEN tmp2:='  ';
@@ -1425,7 +1435,7 @@ IF mode=0 AND trgr.0 THEN
 		scrn:=0;
 	END_IF;
 	IF scrn>=100 AND scrn<130 THEN													(*переход в окно сервисного режима*)
-		IF key_F2 AND key_alt THEN scrn:=170; END_IF;
+		IF key_F2 AND key_alt THEN scrn:=160; END_IF;
 	END_IF;
 	IF scrn>=100 AND scrn<130 THEN													(*переход в окно настройки точек*)
 		IF key_F2 THEN scrn:=138; END_IF;
@@ -1438,10 +1448,10 @@ IF mode=0 AND trgr.0 THEN
 		CASE scrn OF
 			100:		scrn:=104;
 			101..104:	scrn:=scrn-1;
-			138:		scrn:=160;
+			138:		scrn:=159;
 			139..159:	scrn:=scrn-1;
-			160:		scrn:=183;
-			171..183:	scrn:=scrn-1;
+			160:		scrn:=174;
+			171..174:	scrn:=scrn-1;
 		END_CASE;
 	ELSIF key_down AND NOT key_alt THEN
 		CASE scrn OF
@@ -1449,8 +1459,8 @@ IF mode=0 AND trgr.0 THEN
 			104:		scrn:=100;
 			138..159:	scrn:=scrn+1;
 			160:		scrn:=140;
-			170..183:	scrn:=scrn+1;
-			184:		scrn:=170;
+			170..173:	scrn:=scrn+1;
+			174:		scrn:=170;
 		END_CASE;
 	END_IF;
 END_IF;
@@ -1501,7 +1511,7 @@ END_VAR
 (* @END_DECLARATION := '0' *)
 
 (*Настройки нефть*)
-IF bStart AND  (Error <= 0) THEN
+IF bStart THEN
 
 		IF reTempOilReturn < intSetTempOil THEN
 				bHeatingOil := TRUE;
@@ -1525,19 +1535,19 @@ END_FUNCTION_BLOCK
 (* @SYMFILEFLAGS := '2048' *)
 FUNCTION_BLOCK PULSE_T
 VAR_INPUT
-	IN : BOOL;
+	IN : BOOL :=FALSE;
 	T1 : TIME;
 	T2 : TIME;
-	RST : BOOL;
+	RST : BOOL :=FALSE;
 END_VAR
 VAR_OUTPUT
 	Q : BOOL;
 END_VAR
 VAR
-	init: BOOL;
+	init: BOOL :=FALSE;
 	last: TIME;
 	tx: TIME;
-	edge: BOOL;
+	edge: BOOL :=FALSE;
 END_VAR
 
 
@@ -1559,13 +1569,14 @@ IF NOT init THEN
 ELSIF RST THEN
 	(* asynchronous reset *)
 	Q := FALSE;
-ELSIF IN AND NOT edge AND NOT Q THEN
+ELSIF IN (*AND NOT edge*) AND NOT Q THEN
 	(* a rising edge on in will reversre the output status, if new pulse is startet the start time is stored in last *)
 	last := tx;
 	Q := TRUE;
+(*
 ELSIF NOT IN AND edge AND ((tx - last) > T1) THEN
 	(* a falling edge on IN will clear the output if in was high for more then T1 *)
-	Q := FALSE;
+	Q := FALSE; *)
 ELSIF (tx - last) >= T2 THEN
 	(* timeout for long pulse if second click did not occur or in stays high *)
 	Q := FALSE;
@@ -1726,10 +1737,24 @@ VAR
 	Block_6: Block_FB; (*Блокировка ошибки канала 8 *)
 	Block_7: Block_FB; (*Пламя в топли до запуска*)
 	Block_8: Block_FB; (*Отсутствие пламени*)
+	Block_9: Block_FB; (*Отсутствие пламени во время работы*)
+
+	Block_7_Start :  BOOL:= FALSE;
+	Block_8_Start :  BOOL:= FALSE;
+	Block_9_Start :  BOOL:= FALSE;
+	ton2: INT :=0;
+
+	T_stabErr : TON;
+	bT_stabErr_IN: BOOL :=FALSE;
+	timeT_stabErr  : TIME := T#12s;
+	bT_stabErr_OUT: BOOL :=FALSE;
 
 
-	Block_7_Start :  BOOL;
-	Block_8_Start :  BOOL;
+	T_genErr : TON;
+	bT_genErr_IN: BOOL :=FALSE;
+	timeT_genErr  : TIME := T#5s;
+	bT_genErr_OUT: BOOL :=FALSE;
+
 END_VAR
 
 (* Ошибки с датчиков
@@ -1762,7 +1787,7 @@ IF Quote AND wMode = 2 AND (T11.Q ) THEN (*Из ВО*) (*T11.Q - время продувки*)
 	T11(IN := 0);
 	Alarms := ZeroAlarms;
 END_IF; *)
-
+IF PLCrun.Q THEN
 	(*Ошибка канала 1 положение заслонки топлива *)
 	DECODE_FLOA_AI1(
 		VALUE:= reOil_Valve_AI1,
@@ -1804,6 +1829,7 @@ END_IF; *)
 		DEF_VALUE:= 0.0,
 		_ERR=> byErr_AI8,
 		OUT_VALUE=> reHeater_Oil2_FB);
+END_IF
 
 (*Пламя в топли до запуска*)
 	IF wMode = 3 AND FlameSensor_prph THEN
@@ -1812,13 +1838,37 @@ END_IF; *)
 		Block_7_Start := FALSE;
 	END_IF
 
-(*Отсутствие пламени*)
-	IF (* (Stage = 6 AND  bControlFlame AND NOT  FlameSensor_prph )
-		OR *) (wMode = 5  AND NOT  FlameSensor_prph) THEN
-		Block_8_Start := TRUE;
+(*Отсутствие пламени во время стабилиации*)
+
+	IF  Stage = 6 AND NOT  FlameSensor_prph AND NOT wMode = 5  THEN
+		bT_stabErr_IN := TRUE; (*Включаем счётчик*)
 	ELSE
+		bT_stabErr_IN := FALSE; (*Выключаем счётчик*)
 		Block_8_Start  := FALSE;
+		bT_stabErr_OUT := FALSE;
 	END_IF
+			T_stabErr(
+				IN:= bT_stabErr_IN,
+				PT:= timeT_stabErr,
+				Q=> bT_stabErr_OUT);
+				Block_8_Start := bT_stabErr_OUT;
+
+(*Отсутствие пламени во время работы*)
+
+	IF   wMode = 5  AND NOT  FlameSensor_prph THEN
+		bT_genErr_IN := TRUE; (*Включаем счётчик*)
+	ELSE
+		bT_genErr_IN := FALSE; (*Выключаем счётчик*)
+		Block_9_Start  := FALSE;
+		bT_genErr_OUT := FALSE;
+	END_IF
+
+			T_genErr(
+				IN:= bT_genErr_IN,
+				PT:= timeT_genErr,
+				Q=> bT_genErr_OUT);
+				Block_9_Start := bT_genErr_OUT;
+
 
 Block_1(input:= byErr_AI1>=6, reset:= Quote, bError => NMessage.1);
 Block_2(input:= byErr_AI2>=6, reset:= Quote, bError => NMessage.2);
@@ -1827,9 +1877,9 @@ Block_4(input:= byErr_AI4>=6, reset:= Quote, bError => NMessage.4);
 Block_5(input:= byErr_AI5>=6, reset:= Quote, bError => NMessage.5);
 Block_6(input:= byErr_AI8>=6, reset:= Quote, bError => NMessage.6);
 Block_7(input:= Block_7_Start, reset:= Quote, bError => NMessage.7); (*Пламя в топли до запуска*)
-Block_8(input:= Block_8_Start, reset:= Quote, bError => NMessage.8); (*Отсутствие пламени*)
-
-(*Сигнал авария общий*)
+(*Block_8(input:= Block_8_Start, reset:= Quote, bError => NMessage.8); (*Отсутствие пламени во время стабилиации*)
+Block_9(input:= Block_9_Start, reset:= Quote, bError => NMessage.9); (*Отсутствие пламени во время стабилиации*)  *)
+(*Сигнал авария общий*)  
 bError_out := SEL( NMessage > 0, FALSE, TRUE);
 (*
 
@@ -2076,10 +2126,10 @@ END_PROGRAM
 (* @SYMFILEFLAGS := '2048' *)
 FUNCTION_BLOCK FixButton (*Фиксация кнопки  и сброс при повторном нажатии*)
 VAR_INPUT
-	bIN : BOOL;
+	bIN : BOOL :=FALSE;
 END_VAR
 VAR_OUTPUT
-	bQ: BOOL;
+	bQ: BOOL :=FALSE;
 END_VAR
 VAR
 	Rt : R_TRIG;
@@ -2422,6 +2472,7 @@ VAR
 
 	FixB : FixButton;
 	byModeTest : WORD;
+	testt: INT;
 END_VAR
 (* @END_DECLARATION := '0' *)
 _CFC_BODY
@@ -2527,7 +2578,7 @@ _END
 _ELEMENT
 _ID: 16
 _MACROID: -1
-_POS: 66, 11
+_POS: 67, 11
 _TYPE: _OUTPUT
 _TEXT: FunStart
 _INPUTID: 2
@@ -2756,7 +2807,7 @@ _END
 _ELEMENT
 _ID: 66
 _MACROID: -1
-_POS: 36, 21
+_POS: 37, 21
 _TYPE: _OUTPUT
 _TEXT: Trans
 _INPUTID: 1
@@ -2842,7 +2893,7 @@ _END
 _ELEMENT
 _ID: 23
 _MACROID: -1
-_POS: 36, 17
+_POS: 40, 17
 _TYPE: _OUTPUT
 _TEXT: Valve3
 _INPUTID: 1
@@ -2903,7 +2954,7 @@ _END
 _ELEMENT
 _ID: 19
 _MACROID: -1
-_POS: 65, 25
+_POS: 67, 25
 _TYPE: _OUTPUT
 _TEXT: bHeating_Value
 _INPUTID: 6
@@ -2936,7 +2987,7 @@ _END
 _ELEMENT
 _ID: 20
 _MACROID: -1
-_POS: 65, 26
+_POS: 67, 26
 _TYPE: _OUTPUT
 _TEXT: bHeating_Oil
 _INPUTID: 6
@@ -3003,7 +3054,7 @@ _END
 _ELEMENT
 _ID: 70
 _MACROID: -1
-_POS: 48, 27
+_POS: 48, 26
 _TYPE: _INPUT
 _TEXT: Burner.setTempOil
 _NEGATE: 0
@@ -3012,16 +3063,16 @@ _END
 _ELEMENT
 _ID: 38
 _MACROID: -1
-_POS: 50, 28
+_POS: 48, 27
 _TYPE: _INPUT
-_TEXT: rePress_Oil_Return
+_TEXT: reTemp_Oil
 _NEGATE: 0
 _CONNECTOR: 
 _END
 _ELEMENT
 _ID: 39
 _MACROID: -1
-_POS: 48, 29
+_POS: 48, 28
 _TYPE: _INPUT
 _TEXT: reHeater_Oil1
 _NEGATE: 0
@@ -3030,7 +3081,7 @@ _END
 _ELEMENT
 _ID: 40
 _MACROID: -1
-_POS: 48, 30
+_POS: 48, 29
 _TYPE: _INPUT
 _TEXT: reHeater_Oil2
 _NEGATE: 0
@@ -3143,7 +3194,7 @@ _END
 _ELEMENT
 _ID: 64
 _MACROID: -1
-_POS: 36, 16
+_POS: 38, 16
 _TYPE: _OUTPUT
 _TEXT: bOut_ValueY2_NO
 _INPUTID: 1
@@ -3154,7 +3205,7 @@ _END
 _ELEMENT
 _ID: 65
 _MACROID: -1
-_POS: 36, 15
+_POS: 38, 14
 _TYPE: _OUTPUT
 _TEXT: bOut_ValueY1_NC
 _INPUTID: 1
@@ -3789,9 +3840,9 @@ VAR_GLOBAL RETAIN
 	intHeater_Oil2_set : INT := 10; (* 25 Температура дизеля*)
 
 	(*Параметры на розжиге*)
-	SetOilEasyIgnition :REAL := 50; (*Положение заслонки топлива на дизеле*)
+	SetOilEasyIgnition :REAL := 35; (*Положение заслонки топлива на дизеле*)
 	SetAirEasyIgnition :REAL := 5; (*Положение заслонки воздуха на дизеле*)
-	SetOilHeavyIgnition :REAL := 50; (*Положение заслонки топлива на нефти*)
+	SetOilHeavyIgnition :REAL := 35; (*Положение заслонки топлива на нефти*)
 	SetAirHeavyIgnition :REAL := 5; (*Положение заслонки  воздуха на нефти*)
 	DotsFuel: ARRAY [1..10] OF DotParams :=
 												(Fuel := 25, Air := 30, Pwr := 10),
