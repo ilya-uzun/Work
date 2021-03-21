@@ -8,9 +8,8 @@ FUNCTION_BLOCK DriverAirValve
 VAR_INPUT
 	reValuePosition : REAL; (*Потенциометр*)
 	intSet : INT; (*Точки задание на открытие*)
-	Start:BOOL :=FALSE;
-	Reset:BOOL :=FALSE;
-	Set:BOOL :=FALSE;
+
+
 END_VAR
 
 VAR_IN_OUT
@@ -20,88 +19,45 @@ END_VAR
 VAR_OUTPUT
 	bValueMore: BOOL;
 	bValueLess: BOOL;
-	Error:BYTE;
+
 END_VAR
 VAR
-	ton1:INT;
-	ton2:INT;
-	ton3:INT;
-	ton4:INT;
-	intValuePosition: INT;
-	intValuePositionNorma: INT;
-	timeTO1: TIME;
-	time_Old: TIME  := t#36s; (*36 для принудительного закрытия*)
-	time_OldMore: TIME;
-	time_OldLess: TIME;
-	time_Old2: DINT;
-	time_Old3: DINT;
-	TP_AirMore: TP;
-	TP_AirLess: TP;
-	StartTP_AirMore:BOOL;
-	StartTP_AirLess:BOOL;
-	intValuePosition_Old : INT:=1;
+	star: BOOL := TRUE;
+	Tstar: BOOL := TRUE;
+	ACTUATOR: ACTUATOR_3P;
+	Time_RUN : TIME:= t#36s;
+	status: BYTE;
+	pos: BYTE;
+	set: BYTE;
+	TOF1:TON;
+	TOF1_Q :BOOL;
 
-	timePulse :TIME := t#1s;
-	PULSE_More : PULSE_T;
-	PULSE_Less : PULSE_T;
-	ResetPULSE_More : BOOL;
-	ResetPULSE_Less : BOOL;
 END_VAR
+
 (* @END_DECLARATION := '0' *)
-(*Переводим поценты в время*)
+(*R_TRIG1(CLK:= Tstar, Q=> ); *)
+TOF1(IN:= Tstar, PT:= T#5s, Q=> TOF1_Q);
+IF   TOF1_Q THEN							(*то что выполняется один раз при запуске программы*)
+	star:=FALSE;
+END_IF;
 
-(*IF PLCrun.Q THEN  *)
-	timeTO1:= INT_TO_TIME(intSet*350);
+set:= Transfer_Air(intSet);
 
-
-	IF timeTO1 <> time_Old THEN
-		time_Old2:= TIME_TO_DINT (time_Old - timeTO1); (*Запишем разницу*)
-		IF ton2 < 3 THEN
-			ton2:=ton2+1;
-			ELSE
-				ton2:=0;
-				time_Old := timeTO1;
-			END_IF
-	END_IF
-
-
-	IF Start  THEN
-			IF (time_Old2 <=  0) THEN
-					time_Old3:= time_Old2*(-1); (*избавляемся от минуса*)
-					time_OldMore :=  DINT_TO_TIME(time_Old3);
-					StartTP_AirMore :=  TRUE;
-					StartTP_AirLess :=  FALSE;
-					ResetPULSE_More := FALSE;
-					ResetPULSE_Less  := TRUE;
-			END_IF
-
-			IF time_Old2 >=  0 THEN
-					time_OldLess :=  DINT_TO_TIME(time_Old2);
-					StartTP_AirLess :=  TRUE;
-					StartTP_AirMore :=  FALSE;
-					ResetPULSE_More := TRUE;
-					ResetPULSE_Less  := FALSE;
-			END_IF
-			(*ELSIF notbValueMore AND NOT bValueLess THEN *)
-	END_IF
-	
-	PULSE_More(
-		IN:= StartTP_AirMore,
-		T1:= timePulse,
-		T2:= time_OldMore,
-		RST:= ResetPULSE_More,
-		Q=> bValueMore);
-
-	PULSE_Less(
-		IN:= StartTP_AirLess,
-		T1:= timePulse,
-		T2:= time_OldLess,
-		RST:= ResetPULSE_Less,
-		Q=> bValueLess);
-(*END_IF*)
-(*
-TP_AirMore(IN:=StartTP_AirMore, PT:= time_OldMore, Q=> bValueMore, ET=> );
-TP_AirLess(IN:=StartTP_AirLess, PT:= time_OldLess, Q=> bValueLess, ET=> ); *)
+		ACTUATOR(
+			IN:= set,
+			TEST:= ,
+			ARE:= star,
+			END_POS:= ,
+			T_RUN:= Time_RUN,
+			T_EXT:= , 
+			T_CAL:= ,
+			T_DIAG:= ,
+			SWITCH_AVAIL:= ,
+			OUT1=> bValueMore,
+			OUT2=> bValueLess,
+			POS=> pos,
+			ERROR=> , 
+			STATUS=> status );
 END_FUNCTION_BLOCK
 
 
@@ -496,14 +452,14 @@ IF Mode = 4 THEN;
 END_IF;
 
 (*** Режим работа--------------------------------------------------------------*)
-IF Mode = 5 AND  (byControlMode = 1) THEN; (*Местное управление*)
+(*IF Mode = 5 AND  (byControlMode = 1) THEN; (*Местное управление*)
 	IF MorePower_cmd THEN
 		SetPower := SetPower + 0.2; (*5% / c*)
 	END_IF;
 	IF LessPower_cmd THEN
 		SetPower := SetPower - 0.2; (*5% / c*)
 	END_IF;
-END_IF;
+END_IF;  *)
 IF Mode = 5 AND (byControlMode = 0) THEN (*Дистанционное управление мощностью*)
 	SetPower := SetPower_val;
 END_IF;
@@ -931,6 +887,9 @@ VAR
 	spt3: INT;
 	spt4: INT;
 
+	Gen1: TON;
+	Gen2: TON;
+	Meandr1:BLINK;
 END_VAR
 (* @END_DECLARATION := '0' *)
 IF NOT starting THEN							(*то что выполняется один раз при запуске программы*)
@@ -952,15 +911,28 @@ key_up:=Keyboard.3;
 key_down:=Keyboard.2;
 key_enter:=Keyboard.4;
 
+
+trgr.0:=Keyboard<>kbrd_old;												(*нажатие клавиш*)
+kbrd_old:=Keyboard;
+(*
 IF scrn>=160 AND scrn<200 AND ControlMode<>3 THEN
 	ControlModeOld:=ControlMode;
 	ControlMode:=3;
 ELSIF (scrn<160 OR scrn>=200) AND ControlMode=3 THEN
 	ControlMode:=ControlModeOld;
-END_IF;
+END_IF; *)
 
-trgr.0:=Keyboard<>kbrd_old;												(*нажатие клавиш*)
-kbrd_old:=Keyboard;
+
+Gen1.IN := Keyboard <>0;												(*Автогенерация*)
+Gen1(PT := t#0.5s);
+Gen2.IN := Keyboard <>0;
+Gen2(PT := t#5s);
+Meandr1.ENABLE := Gen1.Q;
+Meandr1(Timehigh := t#50ms, Timelow := t#50ms);
+IF Gen1.Q THEN trgr.0 := Meandr1.OUT AND NOT trgr.1; END_IF; 			(*Если удерживаем, то вкл. генератор*)
+trgr.1 := Meandr1.OUT;
+IF Gen2.Q THEN trgr.0 := 1; END_IF;										(*Если удерживаем долго, то макс. скор. переключений*)
+
 
 CASE scrn OF															(*выбор окон*)
 
@@ -1014,23 +986,25 @@ CASE scrn OF															(*выбор окон*)
 
 		END_CASE;
 
-IF mode<>0 THEN mode:=0; END_IF; (*???*)
+				IF mode<>0 THEN mode:=4; END_IF; (*задание моде 4 для Setpower*)
 
-		IF FuelSel THEN  																	(*Отображение на основном экране*)
-			spt1 := TRUNC(AlarmBurner.reOil_Valve_FB);
+																	(*Отображение на основном экране*)
+			spt1 := TRUNC(Burner.reOilReg_set_FB);
 			spt2 := TRUNC(Power);
 			spt3 := TRUNC(AlarmBurner.reAirValve_FB);
 			spt4 := TRUNC(Setpower);
 			Screen(row1:= tmp2, row2:='Топ=    Мощ=   ', row3:='Взд=    Уст=   ', row4:=tmp1, sp1:=spt1, sp2:=spt2, sp3:=spt3, sp4:=spt4, mode:=mode);
-;
-		END_IF;
-		IF Key_down THEN
+
+		IF mode = 4 AND trgr.0 AND key_up THEN Setpower:=Setpower+1; END_IF;
+		IF mode = 4 AND trgr.0 AND key_down THEN Setpower:=Setpower-1; END_IF;
+
+		(*IF Key_down THEN (*Переход на при нажатии вниз*)
 			spt1 := TRUNC(100.0);
 			spt2 := TRUNC(100.0);
 			spt3 := TRUNC(100.0);
 			spt4 := TRUNC(100.0);
 			Screen(row1:= tmp2, row2:='Скор=    Рг=   ', row3:='Рв=     Рт=   ', row4:=tmp1, sp1:=spt1, sp2:=spt2, sp3:=spt3, sp4:=spt4, mode:=mode);
-		END_IF;
+		END_IF; *)
 
 
 	(**********Окна общих настроек**********)
@@ -1363,7 +1337,7 @@ IF mode<>0 THEN mode:=0; END_IF; (*???*)
 					Edge:= 	trgr.0);
 
 	(**********Окна сервисного режима**********)
-	160:
+	(*160:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Задание мощности' , row4:='Значение=', sp1:= PowerSP, mode:=mode);
 	161:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Трансформатор' , row4:='Задание=', mode:= mode, sp1:= BOOL_TO_INT(Trans));
@@ -1405,7 +1379,7 @@ IF mode<>0 THEN mode:=0; END_IF; (*???*)
 	173:
 		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Концевик' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(LimitSwitch));
 	174:
-		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Сигнал запуска' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(Start));
+		Screen(row1:= '   !ВНИМАНИЕ!' , row2:='Тестовое меню' , row3:='Сигнал запуска' , row4:='Состояние=', mode:= mode, sp1:= BOOL_TO_INT(Start));  *)
 
 END_CASE;
 (*
@@ -1434,9 +1408,9 @@ IF mode=0 AND trgr.0 THEN
 	IF key_F1 THEN																		(*переход в главное окно*)
 		scrn:=0;
 	END_IF;
-	IF scrn>=100 AND scrn<130 THEN													(*переход в окно сервисного режима*)
+	(*IF scrn>=100 AND scrn<130 THEN													(*переход в окно сервисного режима*)
 		IF key_F2 AND key_alt THEN scrn:=160; END_IF;
-	END_IF;
+	END_IF;*)
 	IF scrn>=100 AND scrn<130 THEN													(*переход в окно настройки точек*)
 		IF key_F2 THEN scrn:=138; END_IF;
 	END_IF;
@@ -1465,9 +1439,8 @@ IF mode=0 AND trgr.0 THEN
 	END_IF;
 END_IF;
 
-IF key_enter AND trgr.0 THEN IF mode<4 THEN mode:=mode+1; ELSE mode:=1; END_IF;
-ELSIF key_exit AND trgr.0 THEN mode:=0;
-END_IF;
+IF key_enter AND NOT key_alt AND NOT key_exit AND trgr.0 THEN IF mode<4 THEN mode:=mode+1; ELSE mode:=1; END_IF;
+ELSIF key_exit AND trgr.0 THEN mode:=0; END_IF;
 
 (*
 IF key_start AND trgr.0 AND scrn>=100 AND key_alt THEN GasRegValveCalibrateEnable:=TRUE; AirValveCalibrateEnable:=TRUE;
@@ -1530,70 +1503,6 @@ END_FUNCTION_BLOCK
 
 
 (* @NESTEDCOMMENTS := 'Yes' *)
-(* @PATH := '\/Drivers' *)
-(* @OBJECTFLAGS := '0, 8' *)
-(* @SYMFILEFLAGS := '2048' *)
-FUNCTION_BLOCK PULSE_T
-VAR_INPUT
-	IN : BOOL :=FALSE;
-	T1 : TIME;
-	T2 : TIME;
-	RST : BOOL :=FALSE;
-END_VAR
-VAR_OUTPUT
-	Q : BOOL;
-END_VAR
-VAR
-	init: BOOL :=FALSE;
-	last: TIME;
-	tx: TIME;
-	edge: BOOL :=FALSE;
-END_VAR
-
-
-(*
-version 1.0	15. jul. 2008
-programmer 	hugo
-tested by	oscat
-
-PULSE_T generates a pulse of length T2 if the input pulse is shorter than T1.
-if the input pulse is longer than T1, the output follows the input.
-and rising edge on in will kill a possible output pulse and generate a new pulse instead.
-
-*)
-(* @END_DECLARATION := '0' *)
-tx := DWORD_TO_TIME(T_PLC_MS());
-IF NOT init THEN
-	init := TRUE;
-	last := tx;
-ELSIF RST THEN
-	(* asynchronous reset *)
-	Q := FALSE;
-ELSIF IN (*AND NOT edge*) AND NOT Q THEN
-	(* a rising edge on in will reversre the output status, if new pulse is startet the start time is stored in last *)
-	last := tx;
-	Q := TRUE;
-(*
-ELSIF NOT IN AND edge AND ((tx - last) > T1) THEN
-	(* a falling edge on IN will clear the output if in was high for more then T1 *)
-	Q := FALSE; *)
-ELSIF (tx - last) >= T2 THEN
-	(* timeout for long pulse if second click did not occur or in stays high *)
-	Q := FALSE;
-END_IF;
-
-edge := IN;
-
-(* revision histroy
-hm	15. jul. 2008	rev 1.0
-	original release
-
-
-*)	
-END_FUNCTION_BLOCK
-
-
-(* @NESTEDCOMMENTS := 'Yes' *)
 (* @PATH := '\/Fun' *)
 (* @OBJECTFLAGS := '0, 8' *)
 (* @SYMFILEFLAGS := '2048' *)
@@ -1649,6 +1558,30 @@ END_FUNCTION
 (* @PATH := '\/Fun' *)
 (* @OBJECTFLAGS := '0, 8' *)
 (* @SYMFILEFLAGS := '2048' *)
+FUNCTION Transfer_Oil_pol : REAL
+VAR_INPUT
+	IN: REAL;				(* input value*)
+END_VAR
+VAR
+	IN_Tr : REAL;
+	IN_MIN:REAL := 37;			(* minimum input value *)
+	IN_MAX:REAL := 77;			(* maximum input value *)
+	OUT_MIN:REAL := 0;		(* corresponding minimum output value *)
+	OUT_MAX:REAL  := 100;		(* corresponding maximum output value *)
+	Diff: REAL;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+	(*IN_Tr := IN/100;*)
+	Diff := IN_MAX-IN_MIN;
+	Transfer_Oil_pol := (IN - IN_MIN) / Diff * (OUT_MAX - OUT_MIN) + OUT_MIN;
+END_FUNCTION
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Fun' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
 FUNCTION Transfer_Om : REAL
 VAR_INPUT
 	IN: REAL;				(* input value*)
@@ -1677,16 +1610,16 @@ END_VAR
 VAR
 	IN_Tr : REAL;
 	IN_MIN:REAL := 0;			(* minimum input value *)
-	IN_MAX:REAL := 1;			(* maximum input value *)
-	OUT_MIN:REAL := 0.2;		(* corresponding minimum output value *)
-	OUT_MAX:REAL  := 1;		(* corresponding maximum output value *)
+	IN_MAX:REAL := 100;			(* maximum input value *)
+	OUT_MIN:REAL := 0.37;		(* corresponding minimum output value *)
+	OUT_MAX:REAL  := 0.77;		(* corresponding maximum output value *)
 	Diff: REAL;
 END_VAR
 (* @END_DECLARATION := '0' *)
 
-	IN_Tr := IN/100;
+	(*IN_Tr := IN/100;*)
 	Diff := IN_MAX-IN_MIN;
-	Transfer_To_2_10B := (IN_Tr - IN_MIN) / Diff * (OUT_MAX - OUT_MIN) + OUT_MIN;
+	Transfer_To_2_10B := (IN - IN_MIN) / Diff * (OUT_MAX - OUT_MIN) + OUT_MIN;
 END_FUNCTION
 
 
@@ -1744,13 +1677,16 @@ VAR
 	Block_9_Start :  BOOL:= FALSE;
 	ton2: INT :=0;
 
-	T_stabErr : TON;
+	TP_8: TP_X;
+	TP_9: TP_X;
+
+
 	bT_stabErr_IN: BOOL :=FALSE;
-	timeT_stabErr  : TIME := T#12s;
+	timeT_stabErr  : TIME := T#5s;
 	bT_stabErr_OUT: BOOL :=FALSE;
 
 
-	T_genErr : TON;
+
 	bT_genErr_IN: BOOL :=FALSE;
 	timeT_genErr  : TIME := T#5s;
 	bT_genErr_OUT: BOOL :=FALSE;
@@ -1839,36 +1775,16 @@ END_IF
 	END_IF
 
 (*Отсутствие пламени во время стабилиации*)
-
-	IF  Stage = 6 AND NOT  FlameSensor_prph AND NOT wMode = 5  THEN
-		bT_stabErr_IN := TRUE; (*Включаем счётчик*)
-	ELSE
-		bT_stabErr_IN := FALSE; (*Выключаем счётчик*)
-		Block_8_Start  := FALSE;
-		bT_stabErr_OUT := FALSE;
-	END_IF
-			T_stabErr(
-				IN:= bT_stabErr_IN,
-				PT:= timeT_stabErr,
-				Q=> bT_stabErr_OUT);
-				Block_8_Start := bT_stabErr_OUT;
+TP_8(IN:= Stage = 6 AND NOT  FlameSensor_prph AND NOT wMode = 5  ,
+	   PT:= timeT_stabErr,
+	   Q=> Block_8_Start,
+	   ET=> );
 
 (*Отсутствие пламени во время работы*)
-
-	IF   wMode = 5  AND NOT  FlameSensor_prph THEN
-		bT_genErr_IN := TRUE; (*Включаем счётчик*)
-	ELSE
-		bT_genErr_IN := FALSE; (*Выключаем счётчик*)
-		Block_9_Start  := FALSE;
-		bT_genErr_OUT := FALSE;
-	END_IF
-
-			T_genErr(
-				IN:= bT_genErr_IN,
-				PT:= timeT_genErr,
-				Q=> bT_genErr_OUT);
-				Block_9_Start := bT_genErr_OUT;
-
+TP_9(  IN:=  (wMode = 5  AND NOT FlameSensor_prph),
+	      PT:= timeT_stabErr,
+		Q=> Block_9_Start,
+		ET=> );
 
 Block_1(input:= byErr_AI1>=6, reset:= Quote, bError => NMessage.1);
 Block_2(input:= byErr_AI2>=6, reset:= Quote, bError => NMessage.2);
@@ -2089,6 +2005,7 @@ VAR_IN_OUT
 END_VAR
 VAR
 	TempPwr: BYTE;
+	Edge1 : BOOL;
 END_VAR
 (* @END_DECLARATION := '0' *)
 IF Mode <>0 OR D[Dot].Active THEN TempPwr := D[Dot].Pwr; ELSE TempPwr := 0; END_IF; 				(*Отображать 0 вместо мощности, если т. дизактивирована*)
@@ -2101,7 +2018,7 @@ Screen( row1:= Row1,
 		sp3:=	D[Dot].Air,
 		(*sp4:=	  , *)
 		mode:=	mode );
-IF Edge THEN																			(*Изменение уставок*)
+IF Edge  OR Edge1 THEN																			(*Изменение уставок*)
 	CASE mode OF
 	(*Блокировка изменения мощности, если точка дезактивирована*)
 		1:	IF KeyCode.3 THEN D[Dot].Pwr:= D[Dot].Pwr+1; ELSIF KeyCode.2 THEN D[Dot].Pwr:= D[Dot].Pwr-1; END_IF;
@@ -2192,17 +2109,14 @@ VAR
 	a:ARRAY[1..4] OF INT;
 	str:ARRAY[1..4] OF STRING;
 	tmp1:STRING;
-	tmp2:BYTE;
-	tmp3:BYTE;
-	tmp4:BYTE;
+	tmp2:INT;
+	tmp3:BOOL;
 	ton1: BYTE;
-
-	ton2: BYTE;
-	ton3: BYTE;
 END_VAR
 (* @END_DECLARATION := '0' *)
 IF row1<>row1_old OR row2<>row2_old OR row3<>row3_old OR row4<>row4_old THEN
 	Clear_Display(SINGLE_MODE);
+	tmp2:=0;
 	j:=1;
 	str[1]:=''; str[2]:=''; str[3]:=''; str[4]:='';
 	FOR i:=1 TO LEN(row1) DO
@@ -2267,10 +2181,9 @@ FOR i:=1 TO (j-1) DO
 END_FOR;
 
 CASE mode OF
-		0:
-			Write_Display(SINGLE_MODE, 15, 0, ' ');
 		1:
-		IF j<2 THEN; Write_Display(SINGLE_MODE, 15, 0, '$A6');
+		IF j<2 THEN
+			row1:=CONCAT(CONCAT(row1, ' '),'$A6'); tmp3:=TRUE;
 		ELSE
 			IF a[mode]>100 AND a[mode]<200 THEN
 				row1:=REPLACE(row1,'/',1,a[mode]-100);
@@ -2323,15 +2236,640 @@ CASE mode OF
 		END_IF;
 END_CASE;
 
-Write_Display(SINGLE_MODE, 0, 0, row1);
+IF LEN(Row1) >16 THEN
+	IF ton1=0 THEN tmp2:=0; END_IF;
+	ton1:=ton1+1;
+	IF ton1>10 THEN ton1:=1; tmp2:=tmp2+1; END_IF; (*Время сдвига строки*)
+	IF tmp2=0 THEN
+		tmp1:=LEFT(Row1, 16);
+	ELSIF  tmp2<( LEN(Row1) - 16) THEN
+		tmp1:=LEFT(DELETE(Row1, tmp2,1), 16);
+	ELSIF  tmp2<( LEN(Row1) - 16+2) THEN
+		tmp1:=CONCAT(LEFT(DELETE(Row1, tmp2,1), 16),'  ');
+	ELSIF tmp2<= LEN(Row1) THEN
+		tmp1:=LEFT(CONCAT(CONCAT(LEFT(DELETE(Row1, tmp2,1), 16),'  '),Row1),16);
+	ELSE tmp2:=0;
+	END_IF;
+ELSE
+	IF tmp3 AND mode=0 THEN
+		tmp1:=CONCAT(row1,'  ');
+		IF ton1<100 THEN
+			ton1:=ton1+1;
+		ELSE tmp3:=FALSE;
+		END_IF;
+	ELSE
+		tmp1:=row1;
+		ton1:=0;
+	END_IF;
+END_IF;
+Write_Display(SINGLE_MODE, 0, 0, tmp1);
 Write_Display(SINGLE_MODE, 0, 1, row2);
 Write_Display(SINGLE_MODE, 0, 2, row3);
 Write_Display(SINGLE_MODE, 0, 3, row4);
-
-
-
-
 END_PROGRAM
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Interface' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTIONBLOCK TOF_1
+VAR_INPUT
+	IN : BOOL;
+	PT : TIME;
+	RST : BOOL;
+END_VAR
+VAR_OUTPUT
+	Q : BOOL;
+END_VAR
+VAR
+	tx : TIME;
+	start : TIME;
+END_VAR
+
+(*
+version 1.0	17. jul. 2008
+programmer 	hugo
+tested by	oscat
+
+TOF_1 will extend a pulse on input in for PT seconds.
+in addition the timer can be cleared asynchronously with rst.
+TOF_1 is the same function as TOF from the standard LIB except the asynchronous reset input.
+
+*)
+
+(* @END_DECLARATION := '0' *)
+(* read system timer *)
+tx := DWORD_TO_TIME(T_PLC_MS());
+
+IF RST THEN
+	Q := FALSE;
+ELSIF IN THEN
+	Q := TRUE;
+	start := tx;
+ELSIF tx - start >= PT THEN
+	Q := FALSE;
+END_IF;
+
+
+
+
+(* revision history
+hm	17. jul. 2008	rev 1.0
+	original version
+
+*)
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Interface' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK TP_X
+VAR_INPUT
+	IN : BOOL;
+	PT : TIME;
+END_VAR
+VAR_OUTPUT
+	Q : BOOL;
+	ET : TIME;
+END_VAR
+VAR
+	edge : BOOL;
+	start : TIME;
+	tx: TIME;
+END_VAR
+
+(*
+version 1.3	17. dec. 2008
+programmer 	hugo
+tested by	oscat
+
+retriggerable edge triggered pulse similar to TP but with a retrigger function
+if the pt input is 0 then output is always low.
+*)
+
+(* @END_DECLARATION := '0' *)
+(* read system_time *)
+tx := DWORD_TO_TIME(T_PLC_MS());
+
+(* rising edge trigger *)
+IF IN AND NOT edge THEN
+	start := tx;
+	Q := PT > t#0ms;
+ELSIF Q THEN
+	ET := tx - start;
+	IF ET >= PT THEN
+		Q := FALSE;
+		ET := t#0ms;
+	END_IF;
+END_IF;
+edge := IN;
+
+(* revision history
+hm	4. aug 2006		rev 1.0
+	original version
+
+hm	17. sep 2007	rev 1.1
+	replaced time() with T_PLC_MS() for compatibility reasons
+
+hm	19. oct. 2008	rev 1.2
+	renamed to TP_R to TP_X for compatibility reasons
+
+hm	17. dec. 2008	rev 1.3
+	code optimized
+
+*)
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/ValveAir' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK _RMP_B
+VAR_INPUT
+	DIR : BOOL;  (* true = up *)
+	E : BOOL := TRUE;
+	TR : TIME;
+END_VAR
+VAR_IN_OUT
+	RMP : BYTE;
+END_VAR
+VAR
+	tx, tl, tn : TIME;
+	init : BOOL;
+	last_dir : BOOL;
+	start : BYTE;
+END_VAR
+
+
+(*
+version 1.2		19. feb. 2011
+programmer 	hugo
+tested by		oscat
+
+_RMP_B generates a ramp on an external var of type byte
+tr is the total ramp time, E is an enable and dir the direction of the ramp
+
+*)
+(* @END_DECLARATION := '0' *)
+(* read system timer *)
+tx := DWORD_TO_TIME(T_PLC_MS());
+
+IF E AND init AND (dir = last_dir) AND (RMP <> SEL(DIR, 0, 255)) AND TR = tn THEN
+	RMP := FRMP_B(start, DIR, tx - tl, TR);
+ELSE
+	init := TRUE;
+	tl := tx;
+	tn := tr;
+	start := RMP;
+END_IF;
+last_dir := dir;
+
+
+
+(* revison history
+hm	22. oct. 2008	rev 1.0
+	original version
+
+hm	20. nov. 2008	rev 1.1
+	set default for E to be TRUE
+	added init
+
+hm	19. nov. 2011	rev 1.2
+	new code
+*)
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/ValveAir' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK _RMP_NEXT
+VAR_INPUT
+	E : BOOL := TRUE;
+	IN : BYTE;
+	TR : TIME;
+	TF : TIME;
+	TL : TIME;
+END_VAR
+VAR_OUTPUT
+	DIR : BOOL;    (* upwards = TRUE *)
+	UP : BOOL;
+	DN : BOOL;
+END_VAR
+VAR_IN_OUT
+	OUT : BYTE;
+END_VAR
+VAR
+	rmx : _RMP_B;
+	dirx : TREND_DW;
+	t_lock :TP;
+	xen: BOOL;
+	xdir: BOOL;
+END_VAR
+
+
+(*
+version 1.4		18. jul. 2009
+programmer 	hugo
+tested by		oscat
+
+
+_RMP_NEXT  will generate a ramp output following the input IN.
+on a rising ramp the output will stop as soon as it has surpassed the input in, and on a falling ramp it will stop when out is smaller than in.
+a lockout time T_L will be added between up and down direction.
+
+*)
+(* @END_DECLARATION := '0' *)
+dirx(X := in);
+
+t_lock(in := FALSE, pt := TL);
+
+IF dirx.TU AND (OUT < IN) THEN
+	IF NOT xdir AND xen THEN t_lock(in := TRUE); END_IF;
+	xen := TRUE;
+	xdir := TRUE;
+ELSIF dirx.TD AND (OUT > IN) THEN
+	IF xdir AND xen THEN t_lock(in := TRUE); END_IF;
+	xen := TRUE;
+	xdir := FALSE;
+ELSIF xen THEN
+	IF (xdir AND (out >= in)) OR (NOT xdir AND (out <= in)) THEN
+		xen := FALSE;
+		IF tl > t#0s THEN t_lock(IN := TRUE); END_IF;
+	END_IF;
+END_IF;
+
+IF NOT t_lock.Q AND xen THEN
+		UP := XDIR;
+		DIR := XDIR;
+		DN := NOT XDIR;
+ELSE
+	UP := FALSE;
+	DN := FALSE;
+END_IF;
+
+rmx(rmp := OUT, E := E AND (UP OR DN) , dir := DIR, tr := SEL(dir, TF, TR));
+
+
+(* revison history
+hm	23. nov. 2008	rev 1.0
+	original version
+
+hm	24. jan. 2009	rev 1.1
+	deleted unused vars tmp1, tmp2
+
+hm	20. feb. 2009	rev 1.2
+	improved algorithm
+	added TL
+
+hm	9. mar. 2009	rev 1.3
+	input E was ignored
+	removed double assignments
+
+hm	18. jul. 2009	rev 1.4
+	improved performance
+
+*)
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/ValveAir' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK ACTUATOR_3P
+VAR_INPUT
+	IN : BYTE;
+	TEST : BOOL;
+	ARE : BOOL := FALSE;
+	END_POS : BOOL;
+END_VAR
+VAR_INPUT CONSTANT
+	T_RUN : TIME := t#36s; (*Время открытия клапана*)
+	T_EXT : TIME := T#1s;
+	T_CAL : TIME := t#1s;
+	T_DIAG : TIME := T#30d;
+	SWITCH_AVAIL : BOOL := TRUE; (*False включить диагностику*)
+
+END_VAR
+VAR_IN_OUT
+
+END_VAR
+VAR_OUTPUT
+	OUT1 : BOOL;
+	OUT2 : BOOL;
+	POS : BYTE;
+	ERROR : BOOL;
+	STATUS : BYTE;
+END_VAR
+VAR
+	ramp : _RMP_NEXT;
+	tx : TIME ;
+	next_cal : TIME;
+	next_diag : TIME;
+	last: TIME;
+	start: TIME;
+	ARX : BOOL:=FALSE;
+END_VAR
+
+
+(*
+version 2.0	28. jan 2010
+programmer 	hugo
+tested by		oscat
+
+actuator_3P is an interface for a 3 point actuator.
+a 3P actuator is a motor with 2 directions that drives a valve or flap. the position of the valve or flap is controlled by runtime of the motor foreward or backward.
+the available inputs are:
+IN specifies the position of the actuator, 0 = 0% and 255 = 100%.
+an END_POS input is available for an end_pos switch, this switch indicates the valve or flap to be at either 0% or 100%
+a TEST input can at any time start a diag cycle which turns the motor towards the 0% position, then measures the runtime to 100% and then the runtime to 0%
+these runtimes are stored and used for absolute positioning of the motor during normal operation. this feature is only avaliable with an END_POS switch connected to the input.
+a setup variable T_DIAG can be used to specify how often the actuator repeates this auto_diag cycle automatically.
+at power on a diag cycle is perfomed automatically.
+a time of 0 for T_DIAG means auto diag is never performed.
+
+the outputs out1 and out2 are for the two directions of the motor.
+a pos output indicates the simulated position of the actuator during operation.
+a error output is activated when the specified max_runtime is reached by any direction during debug without an end_switch to become active.
+also when the up and down direction differs by more then 10% the error output is set.
+
+for absolute positioning accuracy the actuator has a setup variable "cal_runtime" if this is set the actuator measures the total runtime of the motors and when this 
+cal_runtime is exceeded it resets the actuator to 0% position and sets the output again to assure absolute accuracy.
+
+test and calibration can be shut off by setting the appropriate values to 0.
+a switch_available setup variable specifies if end_pos switches are available.
+
+*)
+
+(* @END_DECLARATION := '0' *)
+(* read system timer *)
+tx := DWORD_TO_TIME(T_PLC_MS());
+
+(* check test input *)
+IF TEST THEN
+	status := 103;
+	start := tx;
+	(*ARX := TRUE; *)
+END_IF;
+
+CASE status OF
+	0:	(* power on setup *)
+		IF ARE AND NOT ARX THEN
+			status := 103;
+			start := tx;
+			(*ARX := TRUE; *)
+		END_IF;
+
+	100:	(* normal operation *)
+		(* check for auto diagnostics *)
+		IF T_DIAG > T#0s AND tx > next_diag AND ARE AND NOT ARX THEN
+				status := 103;
+				start := tx;
+				(*ARX := TRUE; *)
+
+		(* check for auto calibration *)
+		ELSIF T_CAL > T#0s AND tx > next_cal AND ARE AND NOT ARX THEN
+			IF pos > BYTE#127THEN
+				OUT1 := TRUE;
+				OUT2 := FALSE;
+				ramp.IN := 255;
+				(*ARX := TRUE; *)
+			ELSE
+				OUT1 := FALSE;
+				OUT2 := TRUE;
+				ramp.IN := 0;
+				(*ARX := TRUE; *)
+			END_IF;
+			status := 101;
+			start := tx;
+		ELSE
+			(* increment next_cal if not active *)
+			IF NOT(OUT1 OR OUT2) THEN next_cal := next_cal + (tx-last); END_IF;
+			(* set ramp generator to IN *)
+			ramp.IN := IN;
+		END_IF;
+
+	101:	(* calibrate *)
+		IF tx - start < T_EXT THEN
+			next_cal := tx + T_CAL;
+		ELSIF SWITCH_AVAIL AND END_POS THEN
+			STATUS := 100;
+			(*ARX := FALSE; *)
+		ELSIF tx - start > T_EXT + T_RUN THEN
+			ERROR := SWITCH_AVAIL;
+			(*ARX := FALSE; *)
+		END_IF;
+
+	103:	(* diagnostics up*)
+		(* run up for T_ext *)
+		IF tx - start < T_EXT THEN
+			ERROR := FALSE;
+			ramp.TR := T_RUN;
+			ramp.TF := T_RUN;
+			OUT1 := TRUE;
+			OUT2 := FALSE;
+			ramp.IN := 255;
+		ELSIF SWITCH_AVAIL AND END_POS THEN
+			ramp.TR := tx - start;
+			STATUS := 104;
+		ELSIF tx - start > T_EXT + T_RUN THEN
+			ERROR := SWITCH_AVAIL;
+			STATUS := 104;
+			start := tx;
+		END_IF;
+
+	104:	(* diagnostics dn*)
+		IF tx - start < T_ext THEN
+			OUT1 := FALSE;
+			OUT2 := TRUE;
+			ramp.IN := 0;
+			next_diag := tx + T_DIAG;
+		ELSIF SWITCH_AVAIL AND END_POS THEN
+			ramp.TR := tx - start;
+			(* check if runtimes differ by more than 10% *)
+			IF DINT_TO_TIME(ABS(TIME_TO_DINT(ramp.TR) - TIME_TO_DINT(ramp.TF))*10) > T_RUN THEN error := TRUE; END_IF;
+			STATUS := 100;
+			(*ARX := FALSE; *)
+			next_cal := tx + T_CAL;
+		ELSIF tx - start > T_EXT + T_RUN THEN
+			IF SWITCH_AVAIL THEN ERROR := TRUE; END_IF;
+			STATUS := 100;
+			(*ARX := FALSE; *)
+			next_CAL := tx + T_CAL;
+		END_IF;
+END_CASE;
+
+(* internal flap simulation and output activation *)
+ramp(OUT := POS);
+IF STATUS = 100 THEN
+	OUT1 := ramp.UP;
+	OUT2 := ramp.DN;
+END_IF;
+
+(* adjust position if end switch is active *)
+IF SWITCH_AVAIL AND END_POS THEN
+	POS := SEL(POS > 127, 0, 255);
+	next_cal := tx + T_CAL;
+END_IF;
+
+(* set last to tx for next cycle *)
+last := tx;
+
+
+
+(* revision history
+
+hm	19. oct 2006	rev 1.1
+	added security checks for end_switch to avoid overrun of the end_switch, hans
+
+hm	23. jan 2007	rev 1.2
+	deleted unused variables force_on and force_off
+
+hm	15. sep 2007	 rev 1.3
+	replaced Time() with T_PLC_MS for compatibility and performance reasons
+
+hm	28. jan 2010	rev 2.0
+	new code and new features
+
+*)
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/ValveAir' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION FRMP_B : BYTE
+VAR_INPUT
+	START : BYTE;
+	DIR : BOOL;
+	TD : TIME;
+	TR : TIME;
+END_VAR
+VAR
+END_VAR
+
+
+(*
+version 1.0		17. feb. 2011
+programmer 	hugo
+tested by		oscat
+
+this function calculates a ramp and limits the output to 0 .. 255 without overflow problems
+
+*)
+(* @END_DECLARATION := '0' *)
+IF TD < TR THEN
+	FRMP_B := MIN(DWORD_TO_BYTE(SHL(TIME_TO_DWORD(TD), 8) / TIME_TO_DWORD(TR)), SEL(DIR, START, BYTE#255 - START));
+	IF DIR THEN
+		FRMP_B := START + FRMP_B;
+	ELSE
+		FRMP_B := START - FRMP_B;
+	END_IF;
+ELSE
+	FRMP_B := SEL(DIR, 0, 255);
+END_IF;
+
+
+(* revision history
+
+17. feb. 2011	rev 1.0
+	new module
+
+*)
+END_FUNCTION
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/ValveAir' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION Transfer_Air : BYTE
+VAR_INPUT
+	IN: INT;				(* input value*)
+END_VAR
+VAR
+	IN_MIN:REAL := 0;			(* minimum input value *)
+	IN_MAX:REAL := 100;			(* maximum input value *)
+	OUT_MIN:REAL := 0;		(* corresponding minimum output value *)
+	OUT_MAX:REAL  := 255;		(* corresponding maximum output value *)
+	Diff: REAL;
+END_VAR
+(* @END_DECLARATION := '0' *)
+	Diff := IN_MAX-IN_MIN;
+	Transfer_Air :=REAL_TO_BYTE((IN-IN_MIN)/Diff * (OUT_MAX-OUT_MIN) + OUT_MIN);
+END_FUNCTION
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/ValveAir' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK TREND_DW
+VAR_INPUT
+	X : DWORD;
+END_VAR
+VAR_OUTPUT
+	Q : BOOL;
+	TU : BOOL;
+	TD : BOOL;
+	D : DWORD;
+END_VAR
+VAR
+	last_X: DWORD;
+END_VAR
+
+(*
+version 1.2	14. mar. 2009
+programmer 	hugo
+tested by		oscat
+
+trend_DW analyses the trend of a input signal.
+The Output Q is True if the input X is >= last_X and is false if the input X is <= last_X
+in addition to the trend the output TU will be high for one cycle to signal a rising of the input value X
+and  TD will signal a decreasing value on the input X.
+in case of a change the output D will show the delta of the input to the last input value.
+
+
+*)
+(* @END_DECLARATION := '0' *)
+IF X > last_X THEN
+	TU := TRUE;
+	TD := FALSE;
+	D := X - last_X;
+	Q := TRUE;
+ELSIF X < last_X THEN
+	TD := TRUE;
+	TU := FALSE;
+	D := last_X - X;
+	Q := FALSE;
+ELSE
+	TU := FALSE;
+	TD := FALSE;
+	D := 0;
+END_IF;
+last_X := X;
+
+
+
+(* revision history
+hm	21. nov. 2008	rev 1.0
+	original version
+
+hm	20. feb. 2009	rev 1.1
+	added outputs TU, TD and D
+
+hm	14. mar. 2009	rev 1.2
+	removed double assignments
+
+*)
+END_FUNCTION_BLOCK
 
 
 (* @NESTEDCOMMENTS := 'Yes' *)
@@ -2467,8 +3005,6 @@ END_PROGRAM
 (* @SYMFILEFLAGS := '2048' *)
 PROGRAM PLC_PRG
 VAR
-
-
 
 	FixB : FixButton;
 	byModeTest : WORD;
@@ -2749,7 +3285,7 @@ _END
 _ELEMENT
 _ID: 17
 _MACROID: -1
-_POS: 68, 17
+_POS: 69, 17
 _TYPE: _OUTPUT
 _TEXT: bOut_Air_more
 _INPUTID: 5
@@ -2910,7 +3446,7 @@ _INSTANCE: 1
 _INSTANCENAME: DAirValve
 _TYPENAME: DriverAirValve
 _ENENO: 0
-_INPUTS: 5
+_INPUTS: 2
 _IN
 _INPUTID: 0
 _INPUTIDX: 0
@@ -2921,26 +3457,7 @@ _INPUTID: 68
 _INPUTIDX: 0
 _NEGATE: 0
 _END
-_IN
-_INPUTID: 67
-_INPUTIDX: 0
-_NEGATE: 0
-_END
-_IN
-_INPUTID: 0
-_INPUTIDX: 0
-_NEGATE: 0
-_END
-_IN
-_INPUTID: 0
-_INPUTIDX: 0
-_NEGATE: 0
-_END
-_OUTPUTS: 3
-_OUT
-_NEGATE: 0
-_CONNECTOR: 
-_END
+_OUTPUTS: 2
 _OUT
 _NEGATE: 0
 _CONNECTOR: 
@@ -3034,7 +3551,7 @@ _END
 _ELEMENT
 _ID: 34
 _MACROID: -1
-_POS: 42, 21
+_POS: 41, 19
 _TYPE: _OUTPUT
 _TEXT: reReg_set_0_10
 _INPUTID: 1
@@ -3088,15 +3605,6 @@ _NEGATE: 0
 _CONNECTOR: 
 _END
 _ELEMENT
-_ID: 67
-_MACROID: -1
-_POS: 52, 19
-_TYPE: _INPUT
-_TEXT: TRUE
-_NEGATE: 0
-_CONNECTOR: 
-_END
-_ELEMENT
 _ID: 51
 _MACROID: -1
 _POS: 11, 20
@@ -3128,7 +3636,7 @@ _END
 _ELEMENT
 _ID: 58
 _MACROID: -1
-_POS: 33, 35
+_POS: 63, 38
 _TYPE: _OUTPUT
 _TEXT: reOil_Valve
 _INPUTID: 4
@@ -3840,13 +4348,13 @@ VAR_GLOBAL RETAIN
 	intHeater_Oil2_set : INT := 10; (* 25 Температура дизеля*)
 
 	(*Параметры на розжиге*)
-	SetOilEasyIgnition :REAL := 35; (*Положение заслонки топлива на дизеле*)
+	SetOilEasyIgnition :REAL := 22; (*Положение заслонки топлива на дизеле*)
 	SetAirEasyIgnition :REAL := 5; (*Положение заслонки воздуха на дизеле*)
-	SetOilHeavyIgnition :REAL := 35; (*Положение заслонки топлива на нефти*)
+	SetOilHeavyIgnition :REAL := 22; (*Положение заслонки топлива на нефти*)
 	SetAirHeavyIgnition :REAL := 5; (*Положение заслонки  воздуха на нефти*)
 	DotsFuel: ARRAY [1..10] OF DotParams :=
-												(Fuel := 25, Air := 30, Pwr := 10),
-												(Fuel := 25, Air := 30, Pwr := 20),
+												(Fuel := 25, Air := 10, Pwr := 10),
+												(Fuel := 25, Air := 20, Pwr := 20),
 												(Fuel := 30, Air := 30, Pwr := 30),
 												(Fuel := 40, Air := 40, Pwr := 40),
 												(Fuel := 50, Air := 50, Pwr := 50),
