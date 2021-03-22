@@ -1,0 +1,952 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Interface' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriverHMI
+VAR_INPUT
+	Keyboard:INT;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	Initial:BOOL:=0;
+	key_start: BOOL;
+	key_alt: BOOL;
+	key_exit: BOOL;
+	key_up: BOOL;
+	key_down: BOOL;
+	key_enter: BOOL;
+	kbrd_old:WORD;
+	trgr:BYTE;
+	mode:BYTE:=0;					(*0 - индикация; 1..4 - изменение значений*)
+	tmp1:STRING;
+	tmp2:STRING;
+	ControlModeOld:BYTE;
+	ton1:INT;
+
+(*Бывшие глобальные*)
+	Scrn:WORD;
+	ControlMode: WORD;
+	NumberMessage: WORD;
+	ControlState: WORD;
+
+	(*Новые*)
+	IsAlarm: BOOL;
+	i: BYTE;
+	AlarmsOld: ARRAY [1..33] OF BOOL;
+	spt1: INT;
+	spt2: INT;
+	spt3: INT;
+	spt4: INT;
+	m:WORD;
+	nullMode:BYTE;
+	key_F1: BOOL;
+	key_F2: BOOL;
+	key_F3: BOOL;
+
+	Gen1: TON;
+	Gen2: TON;
+	Meandr1:BLINK;
+END_VAR
+(* @END_DECLARATION := '0' *)
+IF NOT Initial THEN
+	Clear_Display(SINGLE_MODE);
+	Switch_To_Single_Mode();
+	Initial:=TRUE;
+END_IF;
+
+(*Адаптация*)
+IsAlarm := 0;
+FOR i := 1 TO 33 DO							(*Определение последнего появившегося сообщения*)
+	IF PLC_PRG.Alarms[i] > AlarmsOld[i] THEN
+		NumberMessage := i;
+		AlarmsOld[i] := 1;
+	ELSIF PLC_PRG.Alarms[i] < AlarmsOld[i] THEN
+		AlarmsOld[i] := 0;
+	END_IF;
+	IF PLC_PRG.Alarms[i] = 1 THEN IsAlarm := 1; END_IF;
+END_FOR;
+IF IsAlarm = 0 THEN NumberMessage := 0; END_IF; (*Проверка на отсутствие сообщений*)
+
+ControlState := PLC_PRG.Mode; (*Режим работы горелки*)
+IF Remote THEN ControlMode := 1; (*Местное/Дистанционное*)
+ELSE ControlMode := 0;
+END_IF;
+(*Определение нажатия клавиш*)
+key_start:=Keyboard.5;
+key_alt:=Keyboard.7;
+key_exit:=Keyboard.6;
+key_up:=Keyboard.3;
+key_down:=Keyboard.2;
+key_enter:=Keyboard.4;
+key_F1:=Keyboard.0;
+key_F2:=Keyboard.1;
+key_F3:=Keyboard.8;
+
+
+trgr.0:=Keyboard<>kbrd_old;												(*нажатие клавиш*)
+kbrd_old:=Keyboard;
+
+Gen1.IN := Keyboard <>0;												(*Автогенерация*)
+Gen1(PT := t#0.5s);
+Gen2.IN := Keyboard <>0;
+Gen2(PT := t#5s);
+Meandr1.ENABLE := Gen1.Q;
+Meandr1(Timehigh := t#50ms, Timelow := t#50ms);
+IF Gen1.Q THEN trgr.0 := Meandr1.OUT AND NOT trgr.1; END_IF; 			(*Если удерживаем, то вкл. генератор*)
+trgr.1 := Meandr1.OUT;
+IF Gen2.Q THEN trgr.0 := 1; END_IF;										(*Если удерживаем долго, то макс. скор. переключений*)
+
+CASE scrn OF															(*выбор окон*)
+
+	0:																	(*окно состояния*)
+		CASE NumberMessage OF
+			0:
+				tmp2:='Норма';
+			1:
+				tmp2:='Погасание пламени';
+			2:
+				tmp2:='Пламя в топке';
+			31:
+				tmp2:='Отказ сигнал-а давл-я';
+			32:
+				tmp2:='ПЗК1 не герметичен';
+			33:
+				tmp2:='Межклап. простр. не герм.';
+			4:
+				tmp2:='Низкое P газа';
+			5:
+				tmp2:='Высокое P газа';
+			6:
+				tmp2:='Ав. низкое Р газа';
+			7:
+				tmp2:='Ав. высокое Р газа';
+			8:
+				tmp2:='Низкое Р топлива';
+			9:
+				tmp2:='Высокое Р топлива';
+			10:
+				tmp2:='Ав. низкое Р топлива';
+			11:
+				tmp2:='Ав. высокое Р топлива';
+			12:
+				tmp2:='Отказ возд. заслонки';
+			13:
+				tmp2:='Отказ топл. рег. кл.';
+			14:
+				tmp2:='ПЧ не готов';
+			15:
+				tmp2:='Отказ ПЧ';
+			16:
+				tmp2:='Нет связи с ПЧ';
+			17:
+				tmp2:='Нет связи с модулем ПЛК';
+			18:
+				tmp2:='Низкое Р воздуха';
+			19:
+				tmp2:='Высокое Р воздуха';
+			20:
+				tmp2:='Ав. низкое Р воздуха';
+			21:
+				tmp2:='Ав. высокое Р воздуха';
+			22:
+				tmp2:='Отказ газ. рег. клапана';
+			23:
+				tmp2:='Отказ кан. датч. плам.';
+			24:
+				tmp2:='Отказ кан. Рт';
+			25:
+				tmp2:='Отказ кан. Рв';
+
+		END_CASE;
+
+		CASE ControlState OF
+			0:
+				tmp1:='';
+			1:
+				tmp1:='Аварийн. останов';
+			2:
+				IF NOT t11.Q THEN tmp1 := 'Вынужд. останов';
+					ELSE tmp1:='ВО окончен';
+				END_IF;
+			3:
+				tmp1:='СТОП';
+			4:
+				tmp1:='Запуск';
+				CASE Stage OF
+					1:	tmp1 := CONCAT(tmp1, '  Прогрев');
+					3:	IF T103_1.Q AND NOT T103_4.Q THEN tmp1 := CONCAT(tmp1, '  Герм.кл.');
+							ELSE tmp1 := CONCAT(tmp1, '  Продувка');
+						END_IF;
+					5:	tmp1 := CONCAT(tmp1, '  Уст.Розж');
+					7..11:	tmp1 := CONCAT(tmp1, '  Розжиг');
+				END_CASE;
+			5:
+				tmp1 := 'Работа T';
+				tmp1 := CONCAT(tmp1, INT_TO_STRING (Dot));
+				tmp1 := CONCAT(tmp1, ' + ');
+				tmp1 := CONCAT(tmp1, INT_TO_STRING (TRUNC(DotPart*100)));
+			6:
+				tmp1:='Останов';
+		END_CASE;
+
+		IF mode<>0 THEN mode:=0; END_IF; (*???*)
+
+		IF FuelSel THEN  																	(*Отображение на основном экране*)
+			spt1 := TRUNC(PLC_PRG.B1.FuelValve_pos);
+			spt2 := TRUNC(Power);
+			spt3 := TRUNC(PLC_PRG.B1.AirValve_pos);
+			spt4 := TRUNC(Setpower);
+			Screen(row1:= tmp2, row2:='Топ=    Мощ=   ', row3:='Взд=    Уст=   ', row4:=tmp1, sp1:=spt1, sp2:=spt2, sp3:=spt3, sp4:=spt4, mode:=mode);
+		ELSE
+			spt1 := TRUNC(PLC_PRG.B1.GasValve_pos);
+			spt2 := TRUNC(Power);
+			spt3 := TRUNC(PLC_PRG.B1.AirValve_pos);
+			spt4 := TRUNC(Setpower);
+			Screen(row1:= tmp2, row2:='Газ=    Мощ=   ', row3:='Взд=    Уст=   ', row4:=tmp1, sp1:=spt1, sp2:=spt2, sp3:=spt3, sp4:=spt4, mode:=mode);
+		END_IF;
+		IF Key_down THEN
+			spt1 := TRUNC(PLC_PRG.B1.Drive_setSpeed_out)/100;
+			spt2 := TRUNC(GasPress);
+			spt3 := TRUNC(AirPress);
+			spt4 := TRUNC(FuelPress);
+			Screen(row1:= tmp2, row2:='Скор=    Рг=   ', row3:='Рв=     Рт=   ', row4:=tmp1, sp1:=spt1, sp2:=spt2, sp3:=spt3, sp4:=spt4, mode:=mode);
+		END_IF;
+
+(*		IF ManualMode AND trgr.0 THEN IF key_up THEN GasRegulatorSetPoint:=GasRegulatorSetPoint+1; ELSIF key_down THEN GasRegulatorSetPoint:=GasRegulatorSetPoint-1; END_IF; END_IF; есть апп. кнопки*)
+	(**********Окна общих настроек**********)
+	100:
+		CASE ControlMode OF
+			0:
+				tmp1:='Местное';
+				IF mode=1 AND trgr.0 AND key_up THEN ControlMode:=ControlMode+1; END_IF;
+			1:
+				tmp1:='Дистанционное';
+				IF mode=1 AND trgr.0 AND key_down THEN ControlMode:=ControlMode-1; END_IF;
+		END_CASE;
+		Screen(row1:= '#Выбор управления' , row2:=tmp1 , row3:='' , row4:='', mode:=mode);
+		Remote := ControlMode.0;
+	101:
+		spt1:= TRUNC(Panel_AirValveStartPos);
+		spt2:= DWORD_TO_WORD(Panel_StartVentTime/1000);
+		Screen(row1:= '#Уст. прод. на запуске', row2:='Возд.засл=   %' , row3:='Время=   с.' , row4:='', sp1:=spt1, sp2:=spt2, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_AirValveStartPos:=Panel_AirValveStartPos+1; ELSIF key_down THEN Panel_AirValveStartPos:=Panel_AirValveStartPos-1; END_IF;
+				2:	IF key_up THEN Panel_StartVentTime:=Panel_StartVentTime+1000; ELSIF key_down THEN Panel_StartVentTime:=Panel_StartVentTime-1000; END_IF;
+			END_CASE;
+		END_IF;
+	102:
+		spt1:= TRUNC(Panel_GasValveIgnPos);
+		spt2:= TRUNC(Panel_AirValveIgnPosGas);
+		spt3:= TRUNC(Panel_DriveIgnSpeedGas);
+		Screen(row1:= '#Уст. розжига Газ', row2:='Газ.рег=   %' , row3:='Возд.засл=   %' , row4:='Скорость=   %', sp1:=spt1, sp2:=spt2, sp3:=spt3, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_GasValveIgnPos:=Panel_GasValveIgnPos+1; ELSIF key_down THEN Panel_GasValveIgnPos:=Panel_GasValveIgnPos-1; END_IF;
+				2:	IF key_up THEN Panel_AirValveIgnPosGas:=Panel_AirValveIgnPosGas+1; ELSIF key_down THEN Panel_AirValveIgnPosGas:=Panel_AirValveIgnPosGas-1; END_IF;
+				3:	IF key_up THEN Panel_DriveIgnSpeedGas:=Panel_DriveIgnSpeedGas+1; ELSIF key_down THEN Panel_DriveIgnSpeedGas:=Panel_DriveIgnSpeedGas-1; END_IF;
+			END_CASE;
+		END_IF;
+	103:
+		spt1:= TRUNC(Panel_FuelValveIgnPos);
+		spt2:= TRUNC(Panel_AirValveIgnPosFuel);
+		spt3:= TRUNC(Panel_DriveIgnSpeedFuel);
+		Screen(row1:= '#Уст. розжига Топливо', row2:='Топл.рег=   %' , row3:='Возд.засл=   %' , row4:='Скорость=   %', sp1:=spt1, sp2:=spt2, sp3:=spt3, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_FuelValveIgnPos:=Panel_FuelValveIgnPos+1; ELSIF key_down THEN Panel_FuelValveIgnPos:=Panel_FuelValveIgnPos-1; END_IF;
+				2:	IF key_up THEN Panel_AirValveIgnPosFuel:=Panel_AirValveIgnPosFuel+1; ELSIF key_down THEN Panel_AirValveIgnPosFuel:=Panel_AirValveIgnPosFuel-1; END_IF;
+				3:	IF key_up THEN Panel_DriveIgnSpeedFuel:=Panel_DriveIgnSpeedFuel+1; ELSIF key_down THEN Panel_DriveIgnSpeedFuel:=Panel_DriveIgnSpeedFuel-1; END_IF;
+			END_CASE;
+		END_IF;
+	104:
+		spt1:= DWORD_TO_WORD(Panel_SparkStartTime/1000);
+		spt2:= DWORD_TO_WORD(Panel_IgniterStartTime/1000);
+		spt3:= DWORD_TO_WORD(Panel_FlameStartTime/1000);
+		Screen(row1:= '#Уст. розжига' , row2:='Предзап.ген=   с' , row3:='Стаб.запал.=   с' , row4:='Стаб.плам.=   с', sp1:=spt1, sp2:=spt2, sp3:=spt3, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_SparkStartTime:=Panel_SparkStartTime+1000; ELSIF key_down THEN Panel_SparkStartTime:=Panel_SparkStartTime-1000; END_IF;
+				2:	IF key_up THEN Panel_IgniterStartTime:=Panel_IgniterStartTime+1000; ELSIF key_down THEN Panel_IgniterStartTime:=Panel_IgniterStartTime-1000; END_IF;
+				3:	IF key_up THEN Panel_FlameStartTime:=Panel_FlameStartTime+1000; ELSIF key_down THEN Panel_FlameStartTime:=Panel_FlameStartTime-1000; END_IF;
+			END_CASE;
+		END_IF;
+		(*IF Panel_FlameStartTime > 4000 THEN Panel_FlameStartTime:=4000; END_IF; (*Ограничение на стабилизацию запальника, чтобы в общем было не более 7 с.*)*)
+	105:
+		spt1:= DWORD_TO_WORD(Panel_StopVentTime/1000);
+		spt2:= DWORD_TO_WORD(Panel_AlStopVentTime/1000);
+		spt3:= DWORD_TO_WORD(Panel_CleanTime/1000);
+		Screen(row1:= '#Время продувки' , row2:='Останов=   с' , row3:='Вын.останов=   с' , row4:='Вр. очистки=   с', sp1:=spt1, sp2:=spt2, sp3:=spt3, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_StopVentTime:=Panel_StopVentTime+1000; ELSIF key_down THEN Panel_StopVentTime:=Panel_StopVentTime-1000; END_IF;
+				2:	IF key_up THEN Panel_AlStopVentTime:=Panel_AlStopVentTime+1000; ELSIF key_down THEN Panel_AlStopVentTime:=Panel_AlStopVentTime-1000; END_IF;
+				3:	IF key_up THEN Panel_CleanTime:=Panel_CleanTime+1000; ELSIF key_down THEN Panel_CleanTime:=Panel_CleanTime-1000; END_IF;
+			END_CASE;
+		IF Panel_StopVentTime < 150000 THEN Panel_StopVentTime := 150000; END_IF (*Ограничение 150 c.*)
+		IF Panel_AlStopVentTime < 150000 THEN Panel_AlStopVentTime := 150000; END_IF (*Ограничение 150 c.*)
+		END_IF;
+	106:
+		spt1:= DWORD_TO_WORD(Panel_DriveRegTime/1000);
+		spt2:= DWORD_TO_WORD(Panel_DriveMaxFreq);
+		Screen(row1:= '#Уставки ПЧ', row2:='Регулир-е=   с' , row3:='Макс.част.=   Гц' , row4:='', sp1:=spt1, sp2:=spt2, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_DriveRegTime:=Panel_DriveRegTime+1000; ELSIF key_down THEN Panel_DriveRegTime:=Panel_DriveRegTime-1000; END_IF;
+				2:	IF key_up THEN Panel_DriveMaxFreq:=Panel_DriveMaxFreq+1; ELSIF key_down THEN Panel_DriveMaxFreq:=Panel_DriveMaxFreq-1; END_IF;
+			END_CASE;
+		END_IF;
+	107:
+		spt1:= TRUNC(Panel_FuelPressRange);
+		spt2:= TRUNC(Panel_AirPressRange);
+		spt3:= TRUNC(Panel_GasPressRange);
+		Screen(row1:= '#Пределы изм.датч.давления', row2:='Топлива=    кПа' , row3:='Воздуха=    Па' , row4:='Газа=    Па', sp1:=spt1, sp2:=spt2, sp3:=spt3, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_FuelPressRange:=Panel_FuelPressRange+10; ELSIF key_down THEN Panel_FuelPressRange:=Panel_FuelPressRange-10; END_IF;
+				2:	IF key_up THEN Panel_AirPressRange:=Panel_AirPressRange+10; ELSIF key_down THEN Panel_AirPressRange:=Panel_AirPressRange-10; END_IF;
+				3:	IF key_up THEN Panel_GasPressRange:=Panel_GasPressRange+10; ELSIF key_down THEN Panel_GasPressRange:=Panel_GasPressRange-10; END_IF;
+			END_CASE;
+		END_IF;
+	108:
+		spt1:= TRUNC(Panel_GasValve_MinPos);
+		spt2:= TRUNC(Panel_GasValve_MaxPos);
+		spt3:= TRUNC(Panel_GasValveTolerance);
+		Screen(row1:= '#Ход рег. Газа', row2:='Мин=' , row3:='Макс=' , row4:='Нечувствит.=   %', sp1:=spt1, sp2:=spt2, sp3:=spt3, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_GasValve_MinPos:=Panel_GasValve_MinPos+1; ELSIF key_down THEN Panel_GasValve_MinPos:=Panel_GasValve_MinPos-1; END_IF;
+				2:	IF key_up THEN Panel_GasValve_MaxPos:=Panel_GasValve_MaxPos+1; ELSIF key_down THEN Panel_GasValve_MaxPos:=Panel_GasValve_MaxPos-1; END_IF;
+				3:	IF key_up THEN Panel_GasValveTolerance:=Panel_GasValveTolerance+1; ELSIF key_down THEN Panel_GasValveTolerance:=Panel_GasValveTolerance-1; END_IF;
+			END_CASE;
+		END_IF;
+	109:
+		spt1:= TRUNC(Panel_AirValve_MinPos);
+		spt2:= TRUNC(Panel_AirValve_MaxPos);
+		Screen(row1:= '#Ход Возд.засл.', row2:='Мин=' , row3:='Макс=' , row4:='', sp1:=spt1, sp2:=spt2, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_AirValve_MinPos:=Panel_AirValve_MinPos+1; ELSIF key_down THEN Panel_AirValve_MinPos:=Panel_AirValve_MinPos-1; END_IF;
+				2:	IF key_up THEN Panel_AirValve_MaxPos:=Panel_AirValve_MaxPos+1; ELSIF key_down THEN Panel_AirValve_MaxPos:=Panel_AirValve_MaxPos-1; END_IF;
+			END_CASE;
+		END_IF;
+	110:
+		spt1:= TRUNC(Panel_FuelValve_MinPos);
+		spt2:= TRUNC(Panel_FuelValve_MaxPos);
+		Screen(row1:= '#Ход Топл.засл.', row2:='Мин=' , row3:='Макс=' , row4:='', sp1:=spt1, sp2:=spt2, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_FuelValve_MinPos:=Panel_FuelValve_MinPos+1; ELSIF key_down THEN Panel_FuelValve_MinPos:=Panel_FuelValve_MinPos-1; END_IF;
+				2:	IF key_up THEN Panel_FuelValve_MaxPos:=Panel_FuelValve_MaxPos+1; ELSIF key_down THEN Panel_FuelValve_MaxPos:=Panel_FuelValve_MaxPos-1; END_IF;
+			END_CASE;
+		END_IF;
+	111:
+		spt1:= DWORD_TO_WORD(Panel_AirValveRegTime/1000);
+		spt2:= DWORD_TO_WORD(Panel_GasValveRegTime/1000);
+		spt3:= DWORD_TO_WORD(Panel_FuelValveRegTime/1000);
+		Screen(row1:= '#Время хода засл.' , row2:='Возд.=   с' , row3:='Газа=   с' , row4:='Топлива=   с', sp1:=spt1, sp2:=spt2, sp3:=spt3, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_AirValveRegTime:=Panel_AirValveRegTime+1000; ELSIF key_down THEN Panel_AirValveRegTime:=Panel_AirValveRegTime-1000; END_IF;
+				2:	IF key_up THEN Panel_GasValveRegTime:=Panel_GasValveRegTime+1000; ELSIF key_down THEN Panel_GasValveRegTime:=Panel_GasValveRegTime-1000; END_IF;
+				3:	IF key_up THEN Panel_FuelValveRegTime:=Panel_FuelValveRegTime+1000; ELSIF key_down THEN Panel_FuelValveRegTime:=Panel_FuelValveRegTime-1000; END_IF;
+			END_CASE;
+		END_IF;
+	112:
+		spt1:= TRUNC(Panel_AirPressHH);
+		spt2:= TRUNC(Panel_AirPressH);
+		Screen(row1:= '#Уставки Р Воздуха, Па' , row2:='ВВ=' , row3:='В=' , row4:='', sp1:=spt1, sp2:=spt2, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_AirPressHH:=Panel_AirPressHH+10; ELSIF key_down THEN Panel_AirPressHH:=Panel_AirPressHH-10; END_IF;
+				2:	IF key_up THEN Panel_AirPressH:=Panel_AirPressH+10; ELSIF key_down THEN Panel_AirPressH:=Panel_AirPressH-10; END_IF;
+			END_CASE;
+		END_IF;
+	113:
+		spt1:= TRUNC(Panel_AirPressLL);
+		spt2:= TRUNC(Panel_AirPressL);
+		Screen(row1:= '#Уставки Р Воздуха, Па' , row2:='НН=' , row3:='Н=' , row4:='', sp1:=spt1, sp2:=spt2, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_AirPressLL:=Panel_AirPressLL+10; ELSIF key_down THEN Panel_AirPressLL:=Panel_AirPressLL-10; END_IF;
+				2:	IF key_up THEN Panel_AirPressL:=Panel_AirPressL+10; ELSIF key_down THEN Panel_AirPressL:=Panel_AirPressL-10; END_IF;
+			END_CASE;
+		END_IF;
+
+	114:
+		spt1:= TRUNC(Panel_GasPressHH);
+		spt2:= TRUNC(Panel_GasPressH);
+		Screen(row1:= '#Уставки Р Газа, Па' , row2:='ВВ=' , row3:='В=' , row4:='', sp1:=spt1, sp2:=spt2, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_GasPressHH:=Panel_GasPressHH+1; ELSIF key_down THEN Panel_GasPressHH:=Panel_GasPressHH-1; END_IF;
+				2:	IF key_up THEN Panel_GasPressH:=Panel_GasPressH+1; ELSIF key_down THEN Panel_GasPressH:=Panel_GasPressH-1; END_IF;
+			END_CASE;
+		END_IF;
+	115:
+		spt1:= TRUNC(Panel_GasPressLL);
+		spt2:= TRUNC(Panel_GasPressL);
+		Screen(row1:= '#Уставки Р Газа, Па' , row2:='НН=' , row3:='Н=' , row4:='', sp1:=spt1, sp2:=spt2, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_GasPressLL:=Panel_GasPressLL+1; ELSIF key_down THEN Panel_GasPressLL:=Panel_GasPressLL-1; END_IF;
+				2:	IF key_up THEN Panel_GasPressL:=Panel_GasPressL+1; ELSIF key_down THEN Panel_GasPressL:=Panel_GasPressL-1; END_IF;
+			END_CASE;
+		END_IF;
+
+	116:
+		spt1:= TRUNC(Panel_FuelPressHH);
+		spt2:= TRUNC(Panel_FuelPressH);
+		Screen(row1:= '#Уставки Р Топлива, Па' , row2:='ВВ=' , row3:='В=' , row4:='', sp1:=spt1, sp2:=spt2, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_FuelPressHH:=Panel_FuelPressHH+1; ELSIF key_down THEN Panel_FuelPressHH:=Panel_FuelPressHH-1; END_IF;
+				2:	IF key_up THEN Panel_FuelPressH:=Panel_FuelPressH+1; ELSIF key_down THEN Panel_FuelPressH:=Panel_FuelPressH-1; END_IF;
+			END_CASE;
+		END_IF;
+	117:
+		spt1:= TRUNC(Panel_FuelPressLL);
+		spt2:= TRUNC(Panel_FuelPressL);
+		Screen(row1:= '#Уставки Р Топлива, Па' , row2:='НН=' , row3:='Н=' , row4:='', sp1:=spt1, sp2:=spt2, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_FuelPressLL:=Panel_FuelPressLL+1; ELSIF key_down THEN Panel_FuelPressLL:=Panel_FuelPressLL-1; END_IF;
+				2:	IF key_up THEN Panel_FuelPressL:=Panel_FuelPressL+1; ELSIF key_down THEN Panel_FuelPressL:=Panel_FuelPressL-1; END_IF;
+			END_CASE;
+		END_IF;
+	118:
+		spt1:= DWORD_TO_WORD(Panel_Ala1Time/1000);
+		spt2:= DWORD_TO_WORD(Panel_Ala2Time/1000);
+		spt3:= DWORD_TO_WORD(Panel_Ala15Time/1000);
+		Screen(row1:= '#Уставки Т блокировок, с' , row2:='Погасания=' , row3:='Засветки=' , row4:='Зап. ПЧ=', sp1:=spt1, sp2:=spt2, sp3:=spt3, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_Ala1Time:=Panel_Ala1Time+1000; ELSIF key_down THEN Panel_Ala1Time:=Panel_Ala1Time-1000; END_IF;
+				2:	IF key_up THEN Panel_Ala2Time:=Panel_Ala2Time+1000; ELSIF key_down THEN Panel_Ala2Time:=Panel_Ala2Time-1000; END_IF;
+				3:	IF key_up THEN Panel_Ala15Time:=Panel_Ala15Time+1000; ELSIF key_down THEN Panel_Ala15Time:=Panel_Ala15Time-1000; END_IF;
+			END_CASE;
+		IF Panel_Ala1Time > 5000 THEN Panel_Ala1Time := 5000; END_IF; (*Время контроля пламени не более 3 сек*)
+		END_IF;
+	119:
+		spt1:= DWORD_TO_WORD(Panel_TightTest1Time/1000);
+		spt2:= DWORD_TO_WORD(Panel_TightTest2Time/1000);
+		spt3:= DWORD_TO_WORD(Panel_TightTest3Time/1000);
+		Screen(row1:= '#Уставки Т герметичности, с' , row2:='Уст.атм.Р=' , row3:='Герм.ПЗК1=' , row4:='Уст. Р газа=', sp1:=spt1, sp2:=spt2, sp3:=spt3, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_TightTest1Time:=Panel_TightTest1Time+1000; ELSIF key_down THEN Panel_TightTest1Time:=Panel_TightTest1Time-1000; END_IF;
+				2:	IF key_up THEN Panel_TightTest2Time:=Panel_TightTest2Time+1000; ELSIF key_down THEN Panel_TightTest2Time:=Panel_TightTest2Time-1000; END_IF;
+				3:	IF key_up THEN Panel_TightTest3Time:=Panel_TightTest3Time+1000; ELSIF key_down THEN Panel_TightTest3Time:=Panel_TightTest3Time-1000; END_IF;
+			END_CASE;
+		END_IF;
+	120:
+		spt1:= DWORD_TO_WORD(Panel_TightTest4Time/1000);
+		Screen(row1:= '#Уставки Т герметичности, с' , row2:='Герм.межклап.' , row3:='=' , row4:='', sp1:=spt1, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_TightTest4Time:=Panel_TightTest4Time+1000; ELSIF key_down THEN Panel_TightTest4Time:=Panel_TightTest4Time-1000; END_IF;
+			END_CASE;
+		END_IF;
+	121:
+		spt1:= TRUNC(Panel_FlameLvl);
+		spt2:= TRUNC(AI8);
+		Screen(row1:= '#Порог пламени, Ом' , row2:='Знач =' , row3:='Измер=' , row4:='', sp1:=spt1, sp2:=spt2, mode:=mode);
+		IF trgr.0 THEN
+			CASE mode OF
+				1:	IF key_up THEN Panel_FlameLvl:=Panel_FlameLvl+1; ELSIF key_down THEN Panel_FlameLvl:=Panel_FlameLvl-1; END_IF;
+			END_CASE;
+		END_IF;
+	122:
+		IF Fuel_Heavy THEN
+			tmp1:='Тяжёлое';
+			IF mode=1 AND trgr.0 AND key_down THEN Fuel_Heavy :=0; END_IF;
+		ELSE
+			tmp1:='Лёгкое';
+			IF mode=1 AND trgr.0 AND key_up THEN Fuel_Heavy:=1; END_IF;
+		END_IF;
+		Screen(row1:= '#Жидкое топливо' , row2:=tmp1 , row3:='' , row4:='', mode:=mode);
+
+	(**********Окна настроек контрольных точек**********)
+	131:	(*Газ т1*)
+			DotSetScreen(
+					Dot:= 	1,
+					row1:= 	'#Газ, т1, P=',
+					D:= 	DotsGas,
+					row2:= 	'Рег.Газа=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	132:	(*Газ т2*)
+			DotSetScreen(
+					Dot:= 	2,
+					row1:= 	'#Газ, т2, P=',
+					D:= 	DotsGas,
+					row2:= 	'Рег.Газа=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	133:	(*Газ т3*)
+			DotSetScreen(
+					Dot:= 	3,
+					row1:= 	'#Газ, т3, P=',
+					D:= 	DotsGas,
+					row2:= 	'Рег.Газа=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	134:	(*Газ т4*)
+			DotSetScreen(
+					Dot:= 	4,
+					row1:= 	'#Газ, т4, P=',
+					D:= 	DotsGas,
+					row2:= 	'Рег.Газа=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	135:	(*Газ т5*)
+			DotSetScreen(
+					Dot:= 	5,
+					row1:= 	'#Газ, т5, P=',
+					D:= 	DotsGas,
+					row2:= 	'Рег.Газа=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	136:	(*Газ т6*)
+			DotSetScreen(
+					Dot:= 	6,
+					row1:= 	'#Газ, т6, P=',
+					D:= 	DotsGas,
+					row2:= 	'Рег.Газа=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	137:	(*Газ т7*)
+			DotSetScreen(
+					Dot:= 	7,
+					row1:= 	'#Газ, т7, P=',
+					D:= 	DotsGas,
+					row2:= 	'Рег.Газа=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+
+	138:	(*Газ т8*)
+			DotSetScreen(
+					Dot:= 	8,
+					row1:= 	'#Газ, т8, P=',
+					D:= 	DotsGas,
+					row2:= 	'Рег.Газа=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+
+	139:	(*Газ т9*)
+			DotSetScreen(
+					Dot:= 	9,
+					row1:= 	'#Газ, т9, P=',
+					D:= 	DotsGas,
+					row2:= 	'Рег.Газа=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	140:	(*Газ т10*)
+			DotSetScreen(
+					Dot:= 	10,
+					row1:= 	'#Газ, т10, P=',
+					D:= 	DotsGas,
+					row2:= 	'Рег.Газа=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+
+	141:	(*Л.Топл. т1*)
+			DotSetScreen(
+					Dot:= 	1,
+					row1:= 	'#Л.топл,т1,P=',
+					D:= 	DotsFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	142:	(*Л.Топл. т2*)
+			DotSetScreen(
+					Dot:= 	2,
+					row1:= 	'#Л.топл,т2,P=',
+					D:= 	DotsFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	143:	(*Л.Топл. т3*)
+			DotSetScreen(
+					Dot:= 	3,
+					row1:= 	'#Л.топл,т3,P=',
+					D:= 	DotsFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	144:	(*Л.Топл. т4*)
+			DotSetScreen(
+					Dot:= 	4,
+					row1:= 	'#Л.топл,т4,P=',
+					D:= 	DotsFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	145:	(*Л.Топл. т5*)
+			DotSetScreen(
+					Dot:= 	5,
+					row1:= 	'#Л.топл,т5,P=',
+					D:= 	DotsFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	146:	(*Л.Топл. т6*)
+			DotSetScreen(
+					Dot:= 	6,
+					row1:= 	'#Л.топл,т6,P=',
+					D:= 	DotsFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	147:	(*Л.Топл. т7*)
+			DotSetScreen(
+					Dot:= 	7,
+					row1:= 	'#Л.топл,т7,P=',
+					D:= 	DotsFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	148:	(*Л.Топл. т8*)
+			DotSetScreen(
+					Dot:= 	8,
+					row1:= 	'#Л.топл,т8,P=',
+					D:= 	DotsFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	149:	(*Л.Топл. т9*)
+			DotSetScreen(
+					Dot:= 	9,
+					row1:= 	'#Л.топл,т9,P=',
+					D:= 	DotsFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	150:	(*Л.Топл. т10*)
+			DotSetScreen(
+					Dot:= 	10,
+					row1:= 	'#Л.топл,т10P=',
+					D:= 	DotsFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	151:	(*Т.Топл. т1*)
+			DotSetScreen(
+					Dot:= 	1,
+					row1:= 	'#Т.топл,т1,P=',
+					D:= 	DotsHeavyFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	152:	(*Т.Топл. т2*)
+			DotSetScreen(
+					Dot:= 	2,
+					row1:= 	'#Т.топл,т2,P=',
+					D:= 	DotsHeavyFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	153:	(*Т.Топл. т3*)
+			DotSetScreen(
+					Dot:= 	3,
+					row1:= 	'#Т.топл,т3,P=',
+					D:= 	DotsHeavyFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	154:	(*Т.Топл. т4*)
+			DotSetScreen(
+					Dot:= 	4,
+					row1:= 	'#Т.топл,т4,P=',
+					D:= 	DotsHeavyFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	155:	(*Т.Топл. т5*)
+			DotSetScreen(
+					Dot:= 	5,
+					row1:= 	'#Т.топл,т5,P=',
+					D:= 	DotsHeavyFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	156:	(*Т.Топл. т6*)
+			DotSetScreen(
+					Dot:= 	6,
+					row1:= 	'#Т.топл,т6,P=',
+					D:= 	DotsHeavyFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	157:	(*Т.Топл. т7*)
+			DotSetScreen(
+					Dot:= 	7,
+					row1:= 	'#Т.топл,т7,P=',
+					D:= 	DotsHeavyFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	158:	(*Т.Топл. т8*)
+			DotSetScreen(
+					Dot:= 	8,
+					row1:= 	'#Т.топл,т8P=',
+					D:= 	DotsHeavyFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+
+	159:	(*Т.Топл. т9*)
+			DotSetScreen(
+					Dot:= 	9,
+					row1:= 	'#Т.топл,т9,P=',
+					D:= 	DotsHeavyFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+	160:	(*Т.Топл. т10*)
+			DotSetScreen(
+					Dot:= 	10,
+					row1:= 	'#Т.топл,т10P=',
+					D:= 	DotsHeavyFuel,
+					row2:= 	'Рег.Топл=    %' ,
+					row3:= 	'Засл.возд=    %' ,
+					row4:= 	'Скорость=    %',
+					Mode:= 	mode,
+					KeyCode:= Keyboard,
+					Edge:= 	trgr.0);
+
+	(**********Окна сервисного режима**********)
+	170:
+		IF Panel_manCtrl THEN spt1:=1; ELSE spt1:=0; END_IF;
+		IF ManualControl THEN tmp2 := 'вкл'; ELSE tmp2:='выкл'; END_IF;
+		IF ManualControl THEN
+			Screen(row1:= '!Ручное управ-е!' , row2:='Знач= ', row3:=CONCAT('Состояние: ', tmp2) , row4:='Блок-и откл-ы!!!', sp1 := spt1, mode:=mode);
+			ELSE Screen(row1:= '!Ручное управ-е!' , row2:='Знач= ', row3:=CONCAT('Состояние: ', tmp2) , row4:='Код = ', sp1 := spt1, sp2:=Panel_manCtrl_code, mode:=mode);
+			END_IF;
+		IF mode=1 AND trgr.0 THEN
+			IF key_up THEN Panel_manCtrl:=TRUE; ELSIF key_down THEN Panel_manCtrl:=FALSE; 	END_IF;
+		END_IF;
+		IF mode=2 AND trgr.0 THEN
+			IF key_up THEN Panel_manCtrl_code := Panel_manCtrl_code +1; ELSIF key_down THEN Panel_manCtrl_code := Panel_manCtrl_code -1; END_IF;
+		END_IF;
+		IF NOT ManualControl AND Panel_manCtrl_code <> 0 THEN Panel_manCtrl:=FALSE; END_IF; (*Пароль не верный*)
+		IF ManualControl AND Panel_manCtrl THEN Panel_manCtrl_code := 0; END_IF; (*Сброс пароля*)
+	171:
+		IF Panel_PZK1_open THEN tmp1:='откр'; ELSE tmp1:='закр'; END_IF;
+		Screen(row1:= '!Ручное управ-е!' , row2:='ПЗК1' , row3:=CONCAT('Знач: ',tmp1), row4:='', mode:=mode);
+		IF mode=1 AND trgr.0 THEN
+			IF key_up THEN Panel_PZK1_open:=TRUE; ELSIF key_down THEN Panel_PZK1_open:=FALSE; END_IF;
+		END_IF;
+	172:
+		IF Panel_PZK2_open THEN tmp1:='откр'; ELSE tmp1:='закр'; END_IF;
+		Screen(row1:= '!Ручное управ-е!' , row2:='ПЗК2' , row3:=CONCAT('Знач: ',tmp1), row4:='', mode:=mode);
+		IF mode=1 AND trgr.0 THEN
+			IF key_up THEN Panel_PZK2_open:=TRUE; ELSIF key_down THEN Panel_PZK2_open:=FALSE; END_IF;
+		END_IF;
+	173:
+		IF NOT Panel_SafeValve_close THEN tmp1:='откр'; ELSE tmp1:='закр'; END_IF;
+		Screen(row1:= '!Ручное управ-е!' , row2:='Клапан безоп-ти' , row3:=CONCAT('Знач: ',tmp1), row4:='', mode:=mode);
+		IF mode=1 AND trgr.0 THEN
+			IF key_up THEN Panel_SafeValve_close:=0; ELSIF key_down THEN Panel_SafeValve_close:=1; END_IF;
+		END_IF;
+	174:
+		IF Panel_IgniterValve_open THEN tmp1:='откр'; ELSE tmp1:='закр'; END_IF;
+		Screen(row1:= '!Ручное управ-е!' , row2:='Клапан запальн-а' , row3:=CONCAT('Знач: ',tmp1), row4:='', mode:=mode);
+		IF mode=1 AND trgr.0 THEN
+			IF key_up THEN Panel_IgniterValve_open:=TRUE; ELSIF key_down THEN Panel_IgniterValve_open:=FALSE; END_IF;
+		END_IF;
+	175:
+		IF Panel_SparkGen THEN tmp1:='вкл'; ELSE tmp1:='выкл'; END_IF;
+		Screen(row1:= '!Ручное управ-е!' , row2:='Искрогенератор' , row3:=CONCAT('Знач: ',tmp1), row4:='', mode:=mode);
+		IF mode=1 AND trgr.0 THEN
+			IF key_up THEN Panel_SparkGen:=TRUE; ELSIF key_down THEN Panel_SparkGen:=FALSE; END_IF;
+		END_IF;
+	176:
+
+		IF Panel_GasValve_open THEN tmp1:='открыть'; ELSE tmp1:='стоп'; END_IF;
+		Screen(row1:= '!Ручное управ-е!' , row2:='Газ.Рег.кл.откр.' , row3:=CONCAT('Знач: ',tmp1), row4:=CONCAT('Положение: ', INT_TO_STRING(TRUNC(PLC_PRG.B1.GasValve_pos))), mode:=mode);
+		IF mode=1 AND trgr.0 THEN
+			IF key_up THEN Panel_GasValve_open:=TRUE; ELSIF key_down THEN Panel_GasValve_open:=FALSE; END_IF;
+		END_IF;
+	177:
+		IF Panel_GasValve_close THEN tmp1:='закрыть'; ELSE tmp1:='стоп'; END_IF;
+		Screen(row1:= '!Ручное управ-е!' , row2:='Газ.Рег.кл.закр.' , row3:=CONCAT('Знач: ',tmp1), row4:=CONCAT('Положение: ', INT_TO_STRING(TRUNC(PLC_PRG.B1.GasValve_pos))), mode:=mode);
+		IF mode=1 AND trgr.0 THEN
+			IF key_up THEN Panel_GasValve_close:=TRUE; ELSIF key_down THEN Panel_GasValve_close:=FALSE; END_IF;
+		END_IF;
+	178:
+		IF Panel_FuelValveHeater_on THEN tmp1:='вкл'; ELSE tmp1:='выкл'; END_IF;
+		Screen(row1:= '!Ручное управ-е!' , row2:='Подогрев кл.топл' , row3:=CONCAT('Знач: ',tmp1), row4:='', mode:=mode);
+		IF mode=1 AND trgr.0 THEN
+			IF key_up THEN Panel_FuelValveHeater_on:=TRUE; ELSIF key_down THEN Panel_FuelValveHeater_on:=FALSE; END_IF;
+		END_IF;
+	179:
+		IF Panel_FuelValve_Open THEN tmp1:='откр'; ELSE tmp1:='закр'; END_IF;
+		Screen(row1:= '!Ручное управ-е!' , row2:='Топл. клапан' , row3:=CONCAT('Знач: ',tmp1), row4:='', mode:=mode);
+		IF mode=1 AND trgr.0 THEN
+			IF key_up THEN Panel_FuelValve_Open:=TRUE; ELSIF key_down THEN Panel_FuelValve_Open:=FALSE; END_IF;
+		END_IF;
+	180:
+		IF Panel_Drive_Start THEN tmp1:='вкл'; ELSE tmp1:='выкл'; END_IF;
+		Screen(row1:= '!Ручное управ-е!' , row2:='ПЧ' , row3:=CONCAT('Знач: ',tmp1), row4:='', mode:=mode);
+		IF mode=1 AND trgr.0 THEN
+			IF key_up THEN Panel_Drive_Start:=TRUE; ELSIF key_down THEN Panel_Drive_Start:=FALSE; END_IF;
+		END_IF;
+	181:
+		spt1 := TRUNC(Panel_Drive_speed);
+		Screen(row1:= '!Ручное управ-е!' , row2:='Скор. ПЧ' , row3:='Знач=', row4:='', sp1 := spt1, mode := mode);
+		IF mode=1 AND trgr.0 THEN
+			IF key_up THEN Panel_Drive_speed:=Panel_Drive_speed+1; ELSIF key_down THEN Panel_Drive_speed:=Panel_Drive_speed-1; END_IF;
+		END_IF;
+	182:
+		spt1 := TRUNC(Panel_AirValve_setpos);
+		spt2 := TRUNC(PLC_PRG.B1.AirValve_pos);
+		Screen(row1:= '!Ручное управ-е!' , row2:='Возд. заслонка' , row3:='Знач=   %', row4:= 'Положение =   %', sp1 := spt1, sp2 := spt2, mode := mode);
+		IF mode=1 AND trgr.0 THEN
+			IF key_up THEN Panel_AirValve_setpos:=Panel_AirValve_setpos+1; ELSIF key_down THEN Panel_AirValve_setpos:=Panel_AirValve_setpos-1; END_IF;
+		END_IF;
+	183:
+		spt1 := TRUNC(Panel_FuelValve_setpos);
+		spt2 := TRUNC(PLC_PRG.B1.FuelValve_pos);
+		Screen(row1:= '!Ручное управ-е!' , row2:='Кл. Рег. топлива' , row3:='Знач=   %', row4:= 'Положение =   %', sp1 := spt1, sp2 := spt2, mode := mode);
+		IF mode=1 AND trgr.0 THEN
+			IF key_up THEN Panel_FuelValve_setpos:=Panel_FuelValve_setpos+1; ELSIF key_down THEN Panel_FuelValve_setpos:=Panel_FuelValve_setpos-1; END_IF;
+		END_IF;
+	184:
+		Screen(row1:= '!Ручное управ-е!' , row2:='Версия ПО :' , row3:=' 03092020 ', row4:= ' ', sp1 := spt1, sp2 := spt2, mode := mode);
+END_CASE;
+
+(*IF trgr.0 AND key_alt AND key_enter THEN GasRegInit:=TRUE; END_IF;*)
+
+
+IF mode=0 AND trgr.0 THEN
+	IF key_F1 THEN																		(*переход в главное окно*)
+		scrn:=0;
+	END_IF;
+	IF scrn>=100 AND scrn<130 THEN													(*переход в окно сервисного режима*)
+		IF key_F2 AND key_alt THEN scrn:=170; END_IF;
+	END_IF;
+	IF scrn>=100 AND scrn<130 THEN													(*переход в окно настройки точек*)
+		IF key_F2 THEN scrn:=131; END_IF;
+	END_IF;
+	IF key_F2 AND scrn<100 THEN																		(*переход в окно настроек*)
+		scrn:=100;
+	END_IF;
+
+	IF key_up AND NOT key_alt THEN
+		CASE scrn OF
+			100:		scrn:=122;
+			101..122:	scrn:=scrn-1;
+			131:		scrn:=160;
+			132..160:	scrn:=scrn-1;
+			170:		scrn:=183;
+			171..183:	scrn:=scrn-1;
+		END_CASE;
+	ELSIF key_down AND NOT key_alt THEN
+		CASE scrn OF
+			100..121:	scrn:=scrn+1;
+			122:		scrn:=100;
+			131..159:	scrn:=scrn+1;
+			160:		scrn:=131;
+			170..183:	scrn:=scrn+1;
+			184:		scrn:=170;
+		END_CASE;
+	END_IF;
+END_IF;
+
+IF scrn = 170 AND mode > 2 THEN mode:=2; END_IF; (*Ограничение режима редактирования в ручном*)
+IF scrn > 170 AND mode > 1 THEN mode:=1; END_IF; (*Ограничение режима редактирования в ручном*)
+IF key_enter AND NOT key_alt AND NOT key_exit AND trgr.0 THEN IF mode<4 THEN mode:=mode+1; ELSE mode:=1; END_IF;
+ELSIF key_exit AND trgr.0 THEN mode:=0; END_IF;
+
+(*IF key_start AND trgr.0 AND scrn>=100 AND key_alt THEN GasRegValveCalibrateEnable:=TRUE; END_IF;*)
+END_FUNCTION_BLOCK

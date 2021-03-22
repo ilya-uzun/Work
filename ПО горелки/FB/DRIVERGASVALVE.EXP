@@ -1,0 +1,189 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Drivers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriverGasValve
+VAR_INPUT
+	Mode:BYTE;
+	Pressure:INT;
+	PressureBeat:INT;
+	PressureHH:INT;
+	PressureH:INT;
+	PressureL:INT;
+	PressureLL:INT;
+	DelayTime:BYTE;
+	IgnitionDelay:BYTE;
+	IgnitionTime:BYTE;
+	IncomingPressureMax:BOOL;
+	IncomingPressureMin:BOOL;
+	SafetyPressureMax:BOOL;
+	Start:BOOL;
+	Stop:BOOL;
+	Reset:BOOL;
+END_VAR
+
+VAR_IN_OUT
+	PressureMax:INT;
+	PressureMin:INT;
+	Valve1:BOOL;
+	Valve2:BOOL;
+	ValveSafety:BOOL;
+	ValveIgnition:BOOL;
+END_VAR
+
+VAR_OUTPUT
+	Done:BOOL;
+	Ready:BOOL;
+	Warning:BYTE;
+	Error:BYTE;
+END_VAR
+VAR
+	PressureBeatOld:INT;
+	ton1:INT;
+	ton2:BYTE;
+	ControlState: BYTE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+IF Reset AND Error<>0 THEN Error:=0; ton1:=0; END_IF;
+
+IF Pressure=0 AND PressureHH=0 AND PressureLL=0 THEN
+	IF Error.0<>0 THEN Error.0:=0; END_IF;
+	IF Warning.1<>0 THEN Warning.1:=0; END_IF;
+	IF Warning.2<>0 THEN Warning.2:=0; END_IF;
+	IF IncomingPressureMax THEN
+		IF ton2<10 THEN ton2:=ton2+1;
+		ELSE Error.1:=TRUE;
+		END_IF;
+	ELSIF IncomingPressureMin THEN
+		IF ton2<10 THEN ton2:=ton2+1;
+		ELSE Error.2:=TRUE;
+		END_IF;
+	ELSE ton2:=0;
+	END_IF;
+	IF mode=1 AND ((ControlState=4 AND NOT SafetyPressureMax) OR (ControlState<3 AND SafetyPressureMax)) THEN
+		Error.3:=TRUE;
+	END_IF;
+ELSE
+	IF PressureBeatOld<>PressureBeat THEN
+		PressureBeatOld:=PressureBeat;
+	ELSIF PressureBeatOld=PressureBeat AND PressureBeat=-1 THEN
+		Error.0:=TRUE;
+	END_IF;
+	IF Pressure>PressureHH THEN
+		IF ton2<50 THEN ton2:=ton2+1;
+		ELSE Error.1:=TRUE;
+		END_IF;
+	ELSIF Pressure<PressureLL THEN
+		IF ton2<50 THEN ton2:=ton2+1;
+		ELSE Error.2:=TRUE;
+		END_IF;
+	ELSE ton2:=0;
+	END_IF;
+	Warning.1:=Pressure>PressureH AND NOT Error.1;
+	Warning.2:=Pressure<PressureL AND NOT Error.2;
+	IF Pressure>PressureMax THEN
+		PressureMax:=Pressure;
+	ELSIF Pressure<PressureMin AND Valve1 THEN
+		PressureMin:=Pressure;
+	END_IF;
+END_IF;
+
+
+IF Stop THEN ControlState:=0;
+ELSIF NOT Start THEN ControlState:=1;
+END_IF;
+
+CASE Mode OF
+	0:
+		CASE ControlState OF
+			0:
+				IF NOT Stop THEN ControlState:=1; END_IF;
+				Done:=FALSE;
+				Ready:=FALSE;
+			1:
+				Done:=FALSE;
+				Ready:=FALSE;
+				Valve1:=FALSE;
+				Valve2:=FALSE;
+				IF ton1<>0 THEN ton1:=0; END_IF;
+				IF Start THEN ControlState:=2; END_IF;
+			2:
+				ton1:=ton1+1;
+				IF ton1>=(DelayTime*10) THEN
+					Ready:=TRUE;
+					Valve1:=TRUE;
+					Valve2:=TRUE;
+					ControlState:=10;
+					ton1:=0;
+				END_IF;
+			10:
+				Done:=TRUE;
+		END_CASE;
+
+	1:
+		CASE ControlState OF
+			0:
+				IF NOT Stop THEN ControlState:=1; END_IF;
+				Done:=FALSE;
+				Ready:=FALSE;
+			1:
+				Done:=FALSE;
+				Ready:=FALSE;
+				Valve1:=FALSE;
+				Valve2:=FALSE;
+				ValveSafety:=FALSE;
+				ValveIgnition:=FALSE;
+				IF ton1<>0 THEN ton1:=0; END_IF;
+				IF Start THEN ControlState:=2; END_IF;
+			2:
+				ValveSafety:=TRUE;
+				ton1:=ton1+1;
+				IF ton1>=10 THEN
+					ton1:=0;
+					ControlState:=3;					
+				END_IF;
+			3:
+				Valve1:=TRUE;
+				ton1:=ton1+1;
+				IF ton1>=20 THEN
+					Valve1:=FALSE;
+					ton1:=0;
+					ControlState:=4;
+				END_IF;
+			4:
+				ton1:=ton1+1;
+				IF ton1>=(DelayTime*10) THEN
+					ton1:=0;
+					ControlState:=5;
+				END_IF;
+			5:
+				Ready:=TRUE;
+				Valve1:=TRUE;
+				ton1:=ton1+1;
+				IF ton1>=10 THEN
+					ton1:=0;
+					ControlState:=6;
+				END_IF;
+			6:
+				ValveIgnition:=TRUE;
+				ton1:=ton1+1;
+				IF ton1>=IgnitionDelay*10 THEN
+					ton1:=0;
+					ControlState:=7;
+				END_IF;
+			7:
+				Valve2:=TRUE;
+				ton1:=ton1+1;
+				IF ton1>=IgnitionTime*10 THEN
+					ValveIgnition:=FALSE;
+					ton1:=0;
+					ControlState:=10;
+				END_IF;
+			10:
+				Done:=TRUE;
+		END_CASE;
+END_CASE;
+
+END_FUNCTION_BLOCK

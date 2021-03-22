@@ -1,0 +1,35 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/FB\/ФБ аварий' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* если на обоих входих истина, запускается таймер и по истечении
+ указаного времяни присваивает зничение на Out=true на оба выхода.
+AlarmAND_FB_Res сбросит Out на false на оба выхода если первое условие and не выполняется*)
+FUNCTION_BLOCK AlarmAND_FB
+VAR_INPUT
+	input: BOOL;
+	inversion : BOOL;
+END_VAR
+VAR_OUTPUT
+	bError: BOOL;
+END_VAR
+VAR
+	TON1 : TON;
+	SEMA1 : SEMA;
+END_VAR
+(* @END_DECLARATION := '0' *)
+IF NOT  inversion AND input
+THEN ton1.IN := TRUE; (*инверсия*)
+ELSE  ton1.IN := FALSE;
+END_IF
+
+TON1(PT:= T#15s);
+
+SEMA1(
+	CLAIM:=ton1.Q ,
+	RELEASE:= b0x0); (*if CLAIM=true of SUSY=true, RELEASE reset. Reset возможен только когда   CLAIM=false*)
+
+bError := SEL (sema1.BUSY, FALSE, TRUE);
+
+END_FUNCTION_BLOCK

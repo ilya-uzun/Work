@@ -1,0 +1,28 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/FB\/ФБ аварий' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK InvAlarm_FB
+VAR_INPUT
+	inversion: BOOL;
+END_VAR
+VAR_OUTPUT
+	bError: BOOL;
+END_VAR
+VAR
+	TON1 : TON;
+	SEMA1 : SEMA;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+ton1.IN := SEL (inversion, TRUE, FALSE);  (*инверсия*)
+
+TON1(PT:= T#3s); (*пака  IN=false  на Q=false, как только IN=true через заданое время PT на Q появится true *)
+
+SEMA1(
+	CLAIM:=ton1.Q ,
+	RELEASE:=b0x0); (*if CLAIM=true of SUSY=true, RELEASE reset. Reset возможен только когда   CLAIM=false*)
+
+bError := SEL (SEMA1.BUSY, FALSE, TRUE);
+END_FUNCTION_BLOCK

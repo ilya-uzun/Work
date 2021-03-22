@@ -1,0 +1,22 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/FB\/ФБ аварий' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK Warning_FB
+VAR_INPUT
+	input : BOOL;
+END_VAR
+VAR_OUTPUT
+	bWarning: BOOL;
+END_VAR
+VAR
+	TON1 : TON;
+END_VAR
+(* @END_DECLARATION := '0' *)
+TON1(
+	IN:=input ,
+	PT:= T#5s  );
+
+bWarning := SEL (TON1.Q, FALSE, TRUE );
+END_FUNCTION_BLOCK

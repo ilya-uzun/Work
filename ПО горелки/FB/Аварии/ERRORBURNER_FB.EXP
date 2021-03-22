@@ -1,0 +1,42 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/FB\/‘Ѕ аварий' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK ErrorBurner_FB
+VAR_INPUT
+	start : BOOL;
+	lampWork : BOOL;
+	lampAlarm : BOOL;
+END_VAR
+VAR_OUTPUT
+	error : BOOL;
+END_VAR
+VAR
+	TON : TON;
+	TON1 : TON;
+	SEMA1 : SEMA;
+END_VAR
+(* @END_DECLARATION := '0' *)
+IF start AND NOT lampWork
+THEN ton.in := TRUE;
+ELSE ton.in := FALSE;
+END_IF
+
+TON(PT:= t#120s );
+
+IF ton.q OR lampAlarm
+THEN TON1.in := TRUE;
+ELSE TON1.in := FALSE;
+END_IF
+
+
+TON1(
+	PT:= T#5s); (*пака  IN=false  на Q=false, как только IN=true через заданое врем€ PT на Q по€витс€ true *)
+
+SEMA1(
+	CLAIM:=ton1.Q ,
+	RELEASE:=b0x0); (*if CLAIM=true of SUSY=true, RELEASE reset. Reset возможен только когда   CLAIM=false*)
+
+error := SEL (sema1.BUSY, FALSE, TRUE);
+END_FUNCTION_BLOCK

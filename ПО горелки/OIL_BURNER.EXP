@@ -444,8 +444,8 @@ IF Mode = 4 THEN;
 
 			(*T111(IN:=1); *)
 			IF bT_Gen_OUT THEN (*Стабилизация пламени*)
-				SetPower := 1;				(*Установка минимальной мощности*)
-				Power := 1;
+				(*SetPower := 1;				(*Установка минимальной мощности*)
+				Power := 1;*)
 				Mode := 5;
 			END_IF;
 	END_CASE;
@@ -488,8 +488,24 @@ IF DotsHeavyFuel[1].Pwr < 1 THEN DotsHeavyFuel[1].Pwr := 1; END_IF;		(*Ограничен
 DotsHeavyFuel[10].Pwr := 100;
 
 DotsFuel[1].Active := 1;													(*Крайние точки всегда активны*)
+DotsFuel[2].Active := 1;
+DotsFuel[3].Active := 1;
+DotsFuel[4].Active := 1;
+DotsFuel[5].Active := 1;
+DotsFuel[6].Active := 1;
+DotsFuel[7].Active := 1;
+DotsFuel[8].Active := 1;
+DotsFuel[9].Active := 1;
 DotsFuel[10].Active := 1;
-DotsHeavyFuel[1].Active := 1;												(*Крайние точки всегда активны*)
+DotsHeavyFuel[1].Active := 1;   (*Крайние точки всегда активны*)
+DotsHeavyFuel[2].Active := 1;
+DotsHeavyFuel[3].Active := 1;
+DotsHeavyFuel[4].Active := 1;
+DotsHeavyFuel[5].Active := 1;
+DotsHeavyFuel[6].Active := 1;
+DotsHeavyFuel[7].Active := 1;
+DotsHeavyFuel[8].Active := 1;
+DotsHeavyFuel[9].Active := 1;
 DotsHeavyFuel[10].Active := 1;
 
 IF Edge1s.Q THEN						(*Определение активных точек раз в сек*)
@@ -718,51 +734,6 @@ END_FUNCTION_BLOCK
 (* @PATH := '\/Drivers' *)
 (* @OBJECTFLAGS := '0, 8' *)
 (* @SYMFILEFLAGS := '2048' *)
-FUNCTION_BLOCK DriverFlameSensor
-VAR_INPUT
-	Mode: BYTE;
-	CheckingTime: BYTE := 1;
-	Simulate:BOOL;
-	FeedBack: BOOL;
-END_VAR
-
-VAR_OUTPUT
-	Beat: REAL;
-	CurrentState:BOOL;
-END_VAR
-
-VAR
-	ton1: BYTE;
-END_VAR
-(* @END_DECLARATION := '0' *)
-CASE Mode OF
-	0:
-		IF ton1<>0 THEN ton1:=0; END_IF;
-		IF Beat<>0.0 THEN Beat:=0.0; END_IF;
-		CurrentState:=FALSE;
-	1:
-		IF FeedBack THEN Beat:=0.0; ELSE Beat:=1000.0; END_IF;
-		IF NOT FeedBack AND ton1<CheckingTime THEN
-			ton1:=ton1+1;
-		ELSIF FeedBack THEN CurrentState:=TRUE; IF ton1<>0 THEN ton1:=0; END_IF;
-		ELSE CurrentState:=FALSE; IF ton1<>0 THEN ton1:=0; END_IF;
-		END_IF;
-	2:
-		IF ton1<>0 THEN ton1:=0; END_IF;
-		IF Beat<>0.0 THEN Beat:=0.0; END_IF;
-		CurrentState:=Simulate;
-END_CASE;
-
-
-
-
-END_FUNCTION_BLOCK
-
-
-(* @NESTEDCOMMENTS := 'Yes' *)
-(* @PATH := '\/Drivers' *)
-(* @OBJECTFLAGS := '0, 8' *)
-(* @SYMFILEFLAGS := '2048' *)
 FUNCTION_BLOCK DriverFun
 VAR_INPUT
 
@@ -945,10 +916,10 @@ CASE scrn OF															(*выбор окон*)
 		ELSIF  NumberMessage.5       THEN tmp2:='ВК2:ош датчика';
 		ELSIF  NumberMessage.6       THEN tmp2:='ВК3:ош датчика';
 		ELSIF  NumberMessage.7       THEN tmp2:='Пламя до запуска';  (*Пламя в топли до запуска*)
-		ELSIF  NumberMessage.8       THEN tmp2:='Нет пламени стаб';
+		ELSIF  NumberMessage.8       THEN tmp2:='Нет пламени при стабилизации';
 		ELSIF  NumberMessage.9       THEN tmp2:='Нет пламени работа';
-		ELSIF  NumberMessage.10     THEN tmp2:='  ';
-		ELSIF  NumberMessage.11     THEN tmp2:='  ';
+		ELSIF  NumberMessage.10     THEN tmp2:='Ав. темп. нагревателя 1';
+		ELSIF  NumberMessage.11     THEN tmp2:='Ав. темп. нагревателя 2';
 		ELSIF  NumberMessage.12     THEN tmp2:='  ';
 		ELSIF  NumberMessage.13     THEN tmp2:='  ';
 		ELSE  tmp2:='Норма';
@@ -981,6 +952,9 @@ CASE scrn OF															(*выбор окон*)
 				tmp1 := CONCAT(tmp1, INT_TO_STRING (Dot));
 				tmp1 := CONCAT(tmp1, ' + ');
 				tmp1 := CONCAT(tmp1, INT_TO_STRING (TRUNC(DotPart*100)));
+
+				IF mode = 4 AND trgr.0 AND key_up THEN Setpower:=Setpower+1; END_IF;
+				IF mode = 4 AND trgr.0 AND key_down THEN Setpower:=Setpower-1; END_IF;
 			6:
 				tmp1:='Останов';
 
@@ -1558,30 +1532,6 @@ END_FUNCTION
 (* @PATH := '\/Fun' *)
 (* @OBJECTFLAGS := '0, 8' *)
 (* @SYMFILEFLAGS := '2048' *)
-FUNCTION Transfer_Oil_pol : REAL
-VAR_INPUT
-	IN: REAL;				(* input value*)
-END_VAR
-VAR
-	IN_Tr : REAL;
-	IN_MIN:REAL := 37;			(* minimum input value *)
-	IN_MAX:REAL := 77;			(* maximum input value *)
-	OUT_MIN:REAL := 0;		(* corresponding minimum output value *)
-	OUT_MAX:REAL  := 100;		(* corresponding maximum output value *)
-	Diff: REAL;
-END_VAR
-(* @END_DECLARATION := '0' *)
-
-	(*IN_Tr := IN/100;*)
-	Diff := IN_MAX-IN_MIN;
-	Transfer_Oil_pol := (IN - IN_MIN) / Diff * (OUT_MAX - OUT_MIN) + OUT_MIN;
-END_FUNCTION
-
-
-(* @NESTEDCOMMENTS := 'Yes' *)
-(* @PATH := '\/Fun' *)
-(* @OBJECTFLAGS := '0, 8' *)
-(* @SYMFILEFLAGS := '2048' *)
 FUNCTION Transfer_Om : REAL
 VAR_INPUT
 	IN: REAL;				(* input value*)
@@ -1671,6 +1621,9 @@ VAR
 	Block_7: Block_FB; (*Пламя в топли до запуска*)
 	Block_8: Block_FB; (*Отсутствие пламени*)
 	Block_9: Block_FB; (*Отсутствие пламени во время работы*)
+	Block_10:Block_FB;
+	Block_11:Block_FB;
+
 
 	Block_7_Start :  BOOL:= FALSE;
 	Block_8_Start :  BOOL:= FALSE;
@@ -1682,13 +1635,13 @@ VAR
 
 
 	bT_stabErr_IN: BOOL :=FALSE;
-	timeT_stabErr  : TIME := T#5s;
+	timeT_stabErr  : TIME := T#3s;
 	bT_stabErr_OUT: BOOL :=FALSE;
 
 
 
 	bT_genErr_IN: BOOL :=FALSE;
-	timeT_genErr  : TIME := T#5s;
+	timeT_genErr  : TIME := T#3S;
 	bT_genErr_OUT: BOOL :=FALSE;
 
 END_VAR
@@ -1765,6 +1718,12 @@ IF PLCrun.Q THEN
 		DEF_VALUE:= 0.0,
 		_ERR=> byErr_AI8,
 		OUT_VALUE=> reHeater_Oil2_FB);
+
+	(*Аварийная температура нагреателя 1 и 2*)
+
+	Block_10(input:= reHeater_Oil1_FB >= 100, reset:= Quote, bError => NMessage.10);
+	Block_11(input:= reHeater_Oil2_FB >= 100, reset:= Quote, bError => NMessage.11);
+
 END_IF
 
 (*Пламя в топли до запуска*)
@@ -1793,8 +1752,8 @@ Block_4(input:= byErr_AI4>=6, reset:= Quote, bError => NMessage.4);
 Block_5(input:= byErr_AI5>=6, reset:= Quote, bError => NMessage.5);
 Block_6(input:= byErr_AI8>=6, reset:= Quote, bError => NMessage.6);
 Block_7(input:= Block_7_Start, reset:= Quote, bError => NMessage.7); (*Пламя в топли до запуска*)
-(*Block_8(input:= Block_8_Start, reset:= Quote, bError => NMessage.8); (*Отсутствие пламени во время стабилиации*)
-Block_9(input:= Block_9_Start, reset:= Quote, bError => NMessage.9); (*Отсутствие пламени во время стабилиации*)  *)
+Block_8(input:= Block_8_Start, reset:= Quote, bError => NMessage.8); (*Отсутствие пламени во время стабилиации*)
+Block_9(input:= Block_9_Start, reset:= Quote, bError => NMessage.9); (*Отсутствие пламени во время стабилиации*)
 (*Сигнал авария общий*)  
 bError_out := SEL( NMessage > 0, FALSE, TRUE);
 (*
@@ -2267,59 +2226,6 @@ Write_Display(SINGLE_MODE, 0, 1, row2);
 Write_Display(SINGLE_MODE, 0, 2, row3);
 Write_Display(SINGLE_MODE, 0, 3, row4);
 END_PROGRAM
-
-
-(* @NESTEDCOMMENTS := 'Yes' *)
-(* @PATH := '\/Interface' *)
-(* @OBJECTFLAGS := '0, 8' *)
-(* @SYMFILEFLAGS := '2048' *)
-FUNCTIONBLOCK TOF_1
-VAR_INPUT
-	IN : BOOL;
-	PT : TIME;
-	RST : BOOL;
-END_VAR
-VAR_OUTPUT
-	Q : BOOL;
-END_VAR
-VAR
-	tx : TIME;
-	start : TIME;
-END_VAR
-
-(*
-version 1.0	17. jul. 2008
-programmer 	hugo
-tested by	oscat
-
-TOF_1 will extend a pulse on input in for PT seconds.
-in addition the timer can be cleared asynchronously with rst.
-TOF_1 is the same function as TOF from the standard LIB except the asynchronous reset input.
-
-*)
-
-(* @END_DECLARATION := '0' *)
-(* read system timer *)
-tx := DWORD_TO_TIME(T_PLC_MS());
-
-IF RST THEN
-	Q := FALSE;
-ELSIF IN THEN
-	Q := TRUE;
-	start := tx;
-ELSIF tx - start >= PT THEN
-	Q := FALSE;
-END_IF;
-
-
-
-
-(* revision history
-hm	17. jul. 2008	rev 1.0
-	original version
-
-*)
-END_FUNCTION_BLOCK
 
 
 (* @NESTEDCOMMENTS := 'Yes' *)
@@ -4234,7 +4140,7 @@ VAR_GLOBAL
 
 	DHeating_Oil : DriversHeating_Oil;
 	Burner : DriverBurner;
-	FlameSensor:DriverFlameSensor;
+
 	BoilerControl:DriverBoiler;
 	DAirValve : DriverAirValve;
 	Trans:BOOL;

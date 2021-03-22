@@ -1,0 +1,90 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK BlockPressing_FB
+VAR_INPUT
+	bStart : BOOL;
+	bStop : BOOL;
+	wMotoB1 : WORD;
+	wMotoB2 : WORD;
+	bHeatingGeneral : BOOL; (*Сигнал на запуск обогревателей ОбщийОбогрев*)
+	bErFan1 : BOOL;
+	bErFan2 : BOOL;
+	bErHeating1 : BOOL;
+	bErHeating2 : BOOL;
+END_VAR
+VAR_OUTPUT
+	bOnFan1 : BOOL;
+	bOnFan2 : BOOL;
+	bOnHeating1 : BOOL;
+	bOnHeating2 : BOOL;
+END_VAR
+VAR
+	statFB : BOOL;
+	bErFan1FB : BOOL; (*переменная для отк. вентилятора при аварии печи*)
+	bErFan2FB : BOOL; (*переменная для отк. вентилятора при аварии печи*)
+	bErFan1GeneralFB : BOOL;
+	bErFan2GeneralFB : BOOL;
+	caseB : BYTE;
+	X: BYTE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(*блок Наддува*)
+	IF bStart AND NOT bStop  THEN
+	statFB  := TRUE;
+	ELSE
+	statFB := FALSE; caseB := 0; bStart := FALSE; X := 0; (* Х здесь на 0 сбрасывается для предотвращения зависания когда ставшь на паузу ведомый*)
+	END_IF
+
+	IF bErFan1 OR bErFan1FB  OR bHeatingGeneral AND bErHeating1 THEN
+	bErFan1GeneralFB := TRUE;
+	ELSE bErFan1GeneralFB := FALSE;
+	END_IF
+
+	IF bErFan2 OR bErFan2FB  OR bHeatingGeneral AND bErHeating2 THEN
+	bErFan2GeneralFB := TRUE;
+	ELSE bErFan2GeneralFB := FALSE;
+	END_IF
+
+	IF  bErFan1GeneralFB   AND  bErFan2GeneralFB  THEN
+	caseB := 0;
+	END_IF
+
+	IF statFB  AND  ( wMotoB1 <= wMotoB2+12-X) AND NOT bErFan1GeneralFB THEN
+	X := 0;
+	caseB :=1;
+	END_IF
+
+	IF  bErFan1GeneralFB   AND NOT bErFan2GeneralFB  THEN
+	caseB := 2;
+	END_IF
+
+	IF statFB  AND  ( wMotoB1 >=  wMotoB2+12) AND NOT bErFan2GeneralFB THEN
+	caseB := 2;
+	X := 11; (* Х для того что бы не позволить функции уравовесить значения*)
+	END_IF
+
+	IF  bErFan2GeneralFB  AND NOT bErFan1GeneralFB  THEN
+	caseB := 1;
+	END_IF
+
+			CASE caseB OF
+			0 : bOnFan1 := FALSE; bOnFan2 := FALSE;
+			1 : bOnFan1 := TRUE; bOnFan2 := FALSE;
+			2 : bOnFan2 := TRUE; bOnFan1 := FALSE;
+			END_CASE
+
+	(*включение печей*)
+	IF bOnFan1  AND bHeatingGeneral AND NOT bErHeating1 THEN (*печь включится если соблюдены условия : вкл*)
+	bOnHeating1:= TRUE;
+	ELSE bOnHeating1:= FALSE;
+	END_IF
+
+
+	IF bOnFan2  AND bHeatingGeneral AND NOT bErHeating2 THEN (*печь включится если соблюдены условия : вкл*)
+	bOnHeating2:= TRUE;
+	ELSE bOnHeating2:= FALSE;
+	END_IF
+END_FUNCTION_BLOCK

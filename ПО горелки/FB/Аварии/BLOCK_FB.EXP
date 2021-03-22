@@ -1,0 +1,28 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/FB\/‘Ѕ аварий' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK Block_FB (*запоминает аварию после 3 сек и запоминает, сброс restar (блок)*)
+VAR_INPUT
+	input: BOOL;
+	reset : BOOL;
+END_VAR
+VAR_OUTPUT
+	bError: BOOL; (*Ћакальна€ переменна€*)
+END_VAR
+VAR
+	TON1 : TON;
+	SEMA1 : SEMA;
+END_VAR
+(* @END_DECLARATION := '0' *)
+TON1(
+	IN:=input ,
+	PT:= T#500ms); (*пака  IN=false  на Q=false, как только IN=true через заданое врем€ PT на Q по€витс€ true *)
+
+SEMA1(
+	CLAIM:=ton1.Q ,
+	RELEASE:=reset); (*if CLAIM=true of SUSY=true, RELEASE reset. Reset возможен только когда   CLAIM=false*)
+
+bError := SEL (sema1.BUSY, FALSE, TRUE);
+END_FUNCTION_BLOCK

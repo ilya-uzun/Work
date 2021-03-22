@@ -1,0 +1,34 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/FB\/ФБ аварий' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK UZnoReady_FB (*Неисправность цепей вентилятора обдува*)
+VAR_INPUT
+	bStart: BOOL;
+	bRediness : BOOL; (*Готовность*)
+END_VAR
+VAR_OUTPUT
+	bError : BOOL;
+END_VAR
+VAR
+	SEMA : SEMA;
+	TON: TON;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(*Если после старта нет готовности - авария*)
+
+ton(
+	IN:= bStart,
+	PT:= T#40s);
+
+IF   ton.Q AND NOT bRediness
+THEN sema.CLAIM := TRUE;
+ELSE sema.CLAIM := FALSE;
+END_IF
+
+sema(RELEASE:= b0x0 );
+
+bError := SEL (sema.BUSY, FALSE, TRUE);
+
+END_FUNCTION_BLOCK

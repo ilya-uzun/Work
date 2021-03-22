@@ -1,0 +1,127 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @GLOBAL_VARIABLE_LIST := 'Global_Variables_of_Burner' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+VAR_GLOBAL
+	(*VersionPO : DWORD:= 03092020;*)
+	PLCrun: TON := (PT := t#5s);
+	T1: TON; (*Время появления пламени*)
+	T2: TON; (*Время исчезновения пламени*)
+	T6: TON; (*Время воздушной заслонки*)
+	T7: TON; (*Время топл. рег. клапана*)
+	T8: TON; (*Время между командой пуск и состоянием привода*)
+	T9: TON; (*Время газ. рег. клапана*)
+	T10F: TOF := (PT := t#1s); (*Таймер проверки необходимости продувки*)
+	T11: TON; 				(*Время продувки при вын. ост*)
+	T12: TON;			(*Время останова для очистки от топлива*)
+	T13: TON;			(*Время разгона привода*)
+	T21: TON := (PT := t#30s); (*Время макс. работы искрогенератора*)
+	T22: TON := (PT := t#200ms); (* Таймер вывода на экран*)
+	T101: TON; (* Время подогрева*)
+	T103: TON; (* Время продуви*)
+	T103_1: TON; (*Время установления атм. давления*)
+	T103_2: TON; (*Время проверки гермет. ПЗК1*)
+	T103_3: TON; (*Время уст. давления газа*)
+	T103_4: TON; (*Время проверки гермет. межклап. пространства*)
+	T105_1: TON; (* Время перевода арматуры на топливе*)
+	T105_2: TON; (* Время перевода арматуры на газе*)
+	T107: TON; (* Время работы ген. перед открытием кл.*)
+	T109: TON; (*Время розжига запальника*)
+	T111: TON; (*Время стабилизации пламени*)
+	T112: TON;(*Защита от дребезга контактов при переводе в стоп*)
+	T200: TON; (*Время вентиляции при останове*)
+	T201: TON; (*Время останова для очистки от топлива*)
+	FuelPress: REAL;
+	AirPress: REAL;
+	GasPress: REAL;
+	FuelFlow: REAL;
+	Ftemp1: REAL;
+	Ftemp2: REAL;
+	Ftemp3: REAL;
+	PZK1_open: BOOL;
+	PZK2_open: BOOL;
+	SafeValve_close: BOOL;
+	IgniterValve_open: BOOL;
+	SparkGen: BOOL;
+	FuelValve_open: BOOL;
+	FuelValve_setpos: REAL;
+	FuelValveMisPos: REAL; (*Запомненное рассогласование*)
+	AirValve_setpos: REAL;
+	AirValveMisPos: REAL; (*Запомненное рассогласование*)
+	GasValve_open: BOOL;
+	GasValve_close: BOOL;
+	GasValveMisPos: REAL;
+	FuelValveHeater: BOOL;
+	Work: BOOL;
+	Warning: BOOL;
+	Warning_Gas: BOOL; (* внимание от режима на газу *)
+	Warning_Fuel: BOOL; (* внимание от режима на топливе *)
+	Alarm: BOOL;
+	Drive_start: BOOL;
+	Drive_setspeed: REAL; (*%*)
+	GasValve_setpos: REAL; (*%*)
+	SetPower: REAL; (*% заданное*)
+	Power: REAL; (*% текущее*)
+	Dot: INT; (*n точки*)
+	Dot2: INT; (*n точки*)
+	DotPart: REAL;
+	DotPart2: REAL;
+	VentilationRequiered: BOOL;		(*Требуется продувка при вынужденном останове.*)
+	Stage: BYTE;
+	FuelSel: BOOL; (* Выбор топлива 1-жидкое 0-газ *)
+	FuelSelHeavy: BOOL; (*Выбора топлива 1-тяжелое 0-легкое*)
+	GasValveDispos: REAL; (*Рассогласование*)
+
+	Meandr2s:BLINK := (Enable :=1, Timehigh := t#2s, Timelow := t#2s);
+	Meandr1s:BLINK := (Enable :=1, Timehigh := t#0.5s, Timelow := t#0.5s);
+	Edge1s: R_TRIG;
+	StartEdge: R_TRIG;
+	StopEdge: F_TRIG;
+	StartingPLCdone: R_TRIG;
+	AlarmEdge: R_TRIG; (*Включатель сирены*)
+	GasValveScaleInF: LIN_TRAFO := (OUT_MIN := 0.0, 	OUT_MAX := 100.0);
+	FuelValveScaleInF: LIN_TRAFO := (OUT_MIN := 0.0, 	OUT_MAX := 100.0);
+	AirValveScaleInF: LIN_TRAFO := (OUT_MIN := 0.0, 	OUT_MAX := 100.0);
+	FuelValveScaleOutF: LIN_TRAFO := (IN_MIN := 0.0, 	IN_MAX := 100.0);
+	AirValveScaleOutF: LIN_TRAFO := (IN_MIN := 0.0, 	IN_MAX := 100.0);
+	DriveSpeedScaleOutF: LIN_TRAFO := (IN_MIN := 0.0, 	IN_MAX := 100.0);
+	DotScaleUp: LIN_TRAFO := (IN_MIN := 0.0, 	IN_MAX := 1.0); (*Определение значения по мощности на оси абсцисс*)
+	DotScaleDn: LIN_TRAFO := (OUT_MIN := 0.0, 	OUT_MAX := 1.0); (*Определение доли мощности между точками*)
+
+	Remote: BOOL;
+	ManEdgeR:R_TRIG; (*Команда ручного*)
+	ManualControl: BOOL; (*Режим ручного*)
+	LED73: BYTE; (*Светодиоды*)
+
+	ADgas:	ARRAY [1..10] OF BYTE; (*Массив индексов активных точек*)
+	ADfuel:	ARRAY [1..10] OF BYTE; (*Массив индексов активных точек*)
+	ADhfuel:	ARRAY [1..10] OF BYTE; (*Массив индексов активных точек*)
+	ADgasAm: BYTE;   (*Кол-во активных точек*)
+	ADfuelAm: BYTE;   (*Кол-во активных точек*)
+	ADhfuelAm: BYTE; (*Кол-во активных точек*)
+	Siren: BOOL;
+
+	Panel_manCtrl_code: BYTE; (*Пароль включения ручного*)
+
+
+(*переменные для визуализации*)
+	tStartTest:BOOL;
+	tIgniterValve:BOOL;
+	tSparkGen:BOOL;
+	tFuelValve:BOOL;
+	tDrive_start:BOOL;
+	tDrive_setSpeed:REAL;
+	tFuelValve_setpos:REAL;
+	tAirValve_setpos:REAL;
+END_VAR
+
+VAR_GLOBAL RETAIN
+END_VAR
+(* @OBJECT_END := 'Global_Variables_of_Burner' *)
+(* @CONNECTIONS := Global_Variables_of_Burner
+FILENAME : ''
+FILETIME : 0
+EXPORT : 0
+NUMOFCONNECTIONS : 0
+*)

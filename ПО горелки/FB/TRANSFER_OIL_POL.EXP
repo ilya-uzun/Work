@@ -1,0 +1,23 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Fun' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION Transfer_Oil_pol : REAL
+VAR_INPUT
+	IN: REAL;				(* input value*)
+END_VAR
+VAR
+	IN_Tr : REAL;
+	IN_MIN:REAL := 37;			(* minimum input value *)
+	IN_MAX:REAL := 77;			(* maximum input value *)
+	OUT_MIN:REAL := 0;		(* corresponding minimum output value *)
+	OUT_MAX:REAL  := 100;		(* corresponding maximum output value *)
+	Diff: REAL;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+	(*IN_Tr := IN/100;*)
+	Diff := IN_MAX-IN_MIN;
+	Transfer_Oil_pol := (IN - IN_MIN) / Diff * (OUT_MAX - OUT_MIN) + OUT_MIN;
+END_FUNCTION

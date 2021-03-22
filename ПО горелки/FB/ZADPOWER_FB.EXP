@@ -1,0 +1,66 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/FB' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK ZadPower_FB
+VAR_INPUT
+	bStart : BOOL;
+	bPIDmax : BOOL;
+	bPIDmin : BOOL;
+	t_min : REAL;
+	t_poin_nod : REAL;
+END_VAR
+VAR_OUTPUT
+	bOpen1 : BOOL;
+	bClose1 : BOOL;
+	rez_hod : REAL; (*значение мощности*)
+	bStartBurner : BOOL;
+END_VAR
+VAR
+
+	TON_Pod : TON;
+	CTUD1 : CTUD;
+	TP_open: TP;
+	TP_close : TP;
+END_VAR
+(* @END_DECLARATION := '0' *)
+TON_Pod(IN:= bStart, PT:= t#2s, Q=>, ET=> );
+(*старт горелки *)
+bStartBurner := SEL (bStart, FALSE, TRUE);
+IF TON_Pod.Q
+THEN
+	TP_open(
+		IN:= NOT TP_open.Q AND bPIDmax  AND (rez_hod<100),
+		PT:=  REAL_TO_TIME (t_min*1000), Q=> , ET=> );
+	TP_close(
+		IN:= NOT TP_close.Q AND  bPIDmin  AND (rez_hod >= 0), (*как задавать NOT bPID кодта требуется мин *)
+		PT:= REAL_TO_TIME (t_min*1000), Q=> , ET=> );
+END_IF
+
+	CTUD1.PV := REAL_TO_WORD(10*t_min *t_poin_nod);
+	CTUD1(
+		CU:= NOT TP_open.Q,
+		CD:= NOT TP_close.Q,
+		RESET:= ,
+		LOAD:= ,
+		PV:= ,
+		QU=> ,
+		QD=> ,
+		CV=> );
+
+rez_hod := (WORD_TO_REAL(CTUD1.CV-1)*t_min*100/t_poin_nod);
+
+IF rez_hod>100
+THEN rez_hod:= 100;
+ELSIF rez_hod<0
+THEN rez_hod:= 0;
+END_IF
+(*сброс счётчика  *)
+IF   bStart
+THEN CTUD1.RESET := FALSE;
+ELSE CTUD1.RESET := TRUE;
+END_IF
+bOpen1 := SEL (TP_open.Q , FALSE, TRUE);
+bClose1 := SEL (TP_close.Q, FALSE, TRUE);
+END_FUNCTION_BLOCK

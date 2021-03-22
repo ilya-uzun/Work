@@ -1,0 +1,54 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Interface' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM DotSetScreen
+VAR_INPUT
+	Dot:BYTE;
+	Row1:STRING;
+	Row2:STRING;
+	Row3:STRING;
+	Row4:STRING;
+	KeyCode: INT;
+	Edge: BOOL;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR_IN_OUT
+	D: 		ARRAY[1..10] OF DotParams;
+	Mode: BYTE;
+END_VAR
+VAR
+	TempPwr: BYTE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+IF Mode <>0 OR D[Dot].Active THEN TempPwr := D[Dot].Pwr; ELSE TempPwr := 0; END_IF; 				(*Отображать 0 вместо мощности, если т. дизактивирована*)
+Screen( row1:= Row1,
+		row2:= Row2,
+		row3:= Row3,
+		row4:= Row4,
+		sp1:=	TempPwr,
+		sp2:=	D[Dot].Fuel,
+		sp3:=	D[Dot].Air,
+		sp4:=	D[Dot].Spd,
+		mode:=	mode );
+IF Edge THEN																			(*Изменение уставок*)
+	CASE mode OF
+		1:	(*IF D[Dot].Active THEN				*)										(*Блокировка изменения мощности, если точка дезактивирована*)
+				IF KeyCode.3 THEN D[Dot].Pwr:= D[Dot].Pwr+1; ELSIF KeyCode.2 THEN D[Dot].Pwr:= D[Dot].Pwr-1; END_IF;
+			(*END_IF;*)
+		2:	IF KeyCode.3 THEN D[Dot].Fuel:= D[Dot].Fuel+1; ELSIF KeyCode.2 THEN D[Dot].Fuel:= D[Dot].Fuel-1; END_IF;
+		3:	IF KeyCode.3 THEN D[Dot].Air:= D[Dot].Air+1; ELSIF KeyCode.2 THEN D[Dot].Air:= D[Dot].Air-1; END_IF;
+		4:	IF KeyCode.3 THEN D[Dot].Spd:= D[Dot].Spd+1; ELSIF KeyCode.2 THEN D[Dot].Spd:= D[Dot].Spd-1; END_IF;
+	END_CASE;
+	IF KeyCode.7 THEN D[Dot].Active := NOT D[Dot].Active; END_IF;						(*Кл. Альт активирует/дезактивирует точку*)
+	IF Dot >=2 AND Dot <=9 THEN														(*Ограничение уставок по мощности соседних точек*)
+		CASE mode OF
+			1:	IF D[Dot].Pwr <= D[Dot-1].Pwr THEN D[Dot].Pwr:= D[Dot-1].Pwr+1; END_IF;
+				IF D[Dot].Pwr >= D[Dot+1].Pwr THEN D[Dot].Pwr:= D[Dot+1].Pwr-1; END_IF;
+		END_CASE;
+	END_IF;
+END_IF;
+
+END_PROGRAM

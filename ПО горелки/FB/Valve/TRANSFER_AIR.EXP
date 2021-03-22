@@ -1,0 +1,22 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION Transfer_Air : BYTE
+VAR_INPUT
+	IN: INT;				(* input value*)
+END_VAR
+VAR
+	IN_MIN:REAL := 0;			(* minimum input value *)
+	IN_MAX:REAL := 100;			(* maximum input value *)
+	OUT_MIN:REAL := 0;		(* corresponding minimum output value *)
+	OUT_MAX:REAL  := 255;		(* corresponding maximum output value *)
+	Diff: REAL;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+
+	Diff := IN_MAX-IN_MIN;
+	Transfer_Air :=REAL_TO_BYTE((IN-IN_MIN)/Diff * (OUT_MAX-OUT_MIN) + OUT_MIN);
+END_FUNCTION

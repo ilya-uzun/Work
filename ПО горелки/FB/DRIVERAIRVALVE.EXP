@@ -1,0 +1,60 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Drivers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK DriverAirValve
+VAR_INPUT
+	reValuePosition : REAL; (*Потенциометр*)
+	intSet : INT; (*Точки задание на открытие*)
+
+
+END_VAR
+
+VAR_IN_OUT
+
+END_VAR
+
+VAR_OUTPUT
+	bValueMore: BOOL;
+	bValueLess: BOOL;
+
+END_VAR
+VAR
+	star: BOOL := TRUE;
+	Tstar: BOOL := TRUE;
+	ACTUATOR: ACTUATOR_3P;
+	Time_RUN : TIME:= t#36s;
+	status: BYTE;
+	pos: BYTE;
+	set: BYTE;
+	TOF1:TOF_1;
+	TOF1_Q :BOOL;
+	R_TRIG1:R_TRIG;
+END_VAR
+
+(* @END_DECLARATION := '0' *)
+(*R_TRIG1(CLK:= Tstar, Q=> ); *)
+TOF1(IN:= Tstar, PT:= T#5s, Q=> TOF1_Q);
+IF  NOT TOF1_Q THEN							(*то что выполняется один раз при запуске программы*)
+	star:=FALSE;
+END_IF;
+
+set:= Transfer_Air(intSet);
+
+		ACTUATOR(
+			IN:= set,
+			TEST:= ,
+			ARE:= star,
+			END_POS:= ,
+			T_RUN:= Time_RUN,
+			T_EXT:= , 
+			T_CAL:= ,
+			T_DIAG:= ,
+			SWITCH_AVAIL:= ,
+			OUT1=> bValueMore,
+			OUT2=> bValueLess,
+			POS=> pos,
+			ERROR=> , 
+			STATUS=> status );
+END_FUNCTION_BLOCK

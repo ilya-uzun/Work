@@ -1,0 +1,191 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Interface' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM Screen
+VAR_INPUT
+	row1:STRING;
+	row2:STRING;
+	row3:STRING;
+	row4:STRING;
+	key_up:BOOL;
+	key_down:BOOL;
+	sp1:INT;
+	sp2:INT;
+	sp3:INT;
+	sp4:INT;
+END_VAR
+
+VAR_IN_OUT
+	mode:BYTE;					(*0 - индикация; 1..4 - изменение значений*)
+END_VAR
+
+VAR
+	row1_old:STRING;
+	row2_old:STRING;
+	row3_old:STRING;
+	row4_old:STRING;
+	i: INT;
+	j:BYTE;								(*количество переменных (на 1 больше)*)
+	a:ARRAY[1..4] OF INT;
+	str:ARRAY[1..4] OF STRING;
+	tmp1:STRING;
+	tmp2:INT;
+	tmp3:BOOL;
+	ton1: BYTE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+IF row1<>row1_old OR row2<>row2_old OR row3<>row3_old OR row4<>row4_old THEN
+	Clear_Display(SINGLE_MODE);
+	tmp2:=0;
+	j:=1;
+	str[1]:=''; str[2]:=''; str[3]:=''; str[4]:='';
+	FOR i:=1 TO LEN(row1) DO
+		IF MID(row1,1,i)='=' THEN
+			a[j]:=100+i;
+			j:=j+1;
+		END_IF;
+	END_FOR;
+	FOR i:=1 TO LEN(row2) DO
+		IF MID(row2,1,i)='=' THEN
+			a[j]:=200+i;
+			j:=j+1;
+		END_IF;
+	END_FOR;
+	FOR i:=1 TO LEN(row3) DO
+		IF MID(row3,1,i)='=' THEN
+			a[j]:=300+i;
+			j:=j+1;
+		END_IF;
+	END_FOR;
+	FOR i:=1 TO LEN(row4) DO
+		IF MID(row4,1,i)='=' THEN
+			a[j]:=400+i;
+			j:=j+1;
+		END_IF;
+	END_FOR;
+END_IF;
+
+CASE j OF
+	1:
+		a[1]:=0; a[2]:=0; a[3]:=0; a[4]:=0;
+	2:
+		a[2]:=0; a[3]:=0; a[4]:=0;
+		str[1]:=INT_TO_STRING(sp1); str[2]:=''; str[3]:=''; str[4]:='';
+	3:
+		a[3]:=0; a[4]:=0;
+		str[1]:=INT_TO_STRING(sp1); str[2]:=INT_TO_STRING(sp2); str[3]:=''; str[4]:='';
+	4:
+		a[4]:=0;
+		str[1]:=INT_TO_STRING(sp1); str[2]:=INT_TO_STRING(sp2); str[3]:=INT_TO_STRING(sp3); str[4]:='';
+	5:
+		str[1]:=INT_TO_STRING(sp1); str[2]:=INT_TO_STRING(sp2); str[3]:=INT_TO_STRING(sp3); str[4]:=INT_TO_STRING(sp4);
+END_CASE;
+row1_old:=row1; row2_old:=row2; row3_old:=row3; row4_old:=row4;
+
+FOR i:=1 TO (j-1) DO
+	IF a[i]>0 THEN
+		IF LEN(str[i])=2 THEN str[i]:=CONCAT(' ',str[i]);
+		ELSIF LEN(str[i])=1 THEN str[i]:=CONCAT('  ',str[i]);
+		END_IF;
+		CASE a[i] OF
+			100..199:
+				 row1:=REPLACE(row1,str[i],3,a[i]-99);
+			200..299:
+				row2:=REPLACE(row2,str[i],3,a[i]-199);
+			300..399:
+				row3:=REPLACE(row3,str[i],3,a[i]-299);
+			400..499:
+				row4:=REPLACE(row4,str[i],3,a[i]-399);
+		END_CASE;
+	END_IF;
+END_FOR;
+
+CASE mode OF
+		1:
+		IF j<2 THEN
+			row1:=CONCAT(CONCAT(row1, ' '),'$A6'); tmp3:=TRUE;
+		ELSE
+			IF a[mode]>100 AND a[mode]<200 THEN
+				row1:=REPLACE(row1,'/',1,a[mode]-100);
+			ELSIF a[mode]>200 AND a[mode]<300 THEN
+				row2:=REPLACE(row2,'/',1,a[mode]-200);
+			ELSIF a[mode]>300 AND a[mode]<400 THEN
+				row3:=REPLACE(row3,'/',1,a[mode]-300);
+			ELSIF a[mode]>400 AND a[mode]<500 THEN
+				row4:=REPLACE(row4,'/',1,a[mode]-400);
+			END_IF;
+		END_IF;
+	2:
+		IF j<3 THEN mode:=0;
+		ELSE
+			IF a[mode]>100 AND a[mode]<200 THEN
+				row1:=REPLACE(row1,'/',1,a[mode]-100);
+			ELSIF a[mode]>200 AND a[mode]<300 THEN
+				row2:=REPLACE(row2,'/',1,a[mode]-200);
+			ELSIF a[mode]>300 AND a[mode]<400 THEN
+				row3:=REPLACE(row3,'/',1,a[mode]-300);
+			ELSIF a[mode]>400 AND a[mode]<500 THEN
+				row4:=REPLACE(row4,'/',1,a[mode]-400);
+			END_IF;
+		END_IF;
+	3:
+		IF j<4 THEN mode:=0;
+		ELSE
+			IF a[mode]>100 AND a[mode]<200 THEN
+				row1:=REPLACE(row1,'/',1,a[mode]-100);
+			ELSIF a[mode]>200 AND a[mode]<300 THEN
+				row2:=REPLACE(row2,'/',1,a[mode]-200);
+			ELSIF a[mode]>300 AND a[mode]<400 THEN
+				row3:=REPLACE(row3,'/',1,a[mode]-300);
+			ELSIF a[mode]>400 AND a[mode]<500 THEN
+				row4:=REPLACE(row4,'/',1,a[mode]-400);
+			END_IF;
+		END_IF;
+	4:
+		IF j<5 THEN mode:=0;
+		ELSE
+			IF a[mode]>100 AND a[mode]<200 THEN
+				row1:=REPLACE(row1,'/',1,a[mode]-100);
+			ELSIF a[mode]>200 AND a[mode]<300 THEN
+				row2:=REPLACE(row2,'/',1,a[mode]-200);
+			ELSIF a[mode]>300 AND a[mode]<400 THEN
+				row3:=REPLACE(row3,'/',1,a[mode]-300);
+			ELSIF a[mode]>400 AND a[mode]<500 THEN
+				row4:=REPLACE(row4,'/',1,a[mode]-400);
+			END_IF;
+		END_IF;
+END_CASE;
+
+IF LEN(Row1) >16 THEN
+	IF ton1=0 THEN tmp2:=0; END_IF;
+	ton1:=ton1+1;
+	IF ton1>10 THEN ton1:=1; tmp2:=tmp2+1; END_IF; (*Время сдвига строки*)
+	IF tmp2=0 THEN
+		tmp1:=LEFT(Row1, 16);
+	ELSIF  tmp2<( LEN(Row1) - 16) THEN
+		tmp1:=LEFT(DELETE(Row1, tmp2,1), 16);
+	ELSIF  tmp2<( LEN(Row1) - 16+2) THEN
+		tmp1:=CONCAT(LEFT(DELETE(Row1, tmp2,1), 16),'  ');
+	ELSIF tmp2<= LEN(Row1) THEN
+		tmp1:=LEFT(CONCAT(CONCAT(LEFT(DELETE(Row1, tmp2,1), 16),'  '),Row1),16);
+	ELSE tmp2:=0;
+	END_IF;
+ELSE
+	IF tmp3 AND mode=0 THEN
+		tmp1:=CONCAT(row1,'  ');
+		IF ton1<100 THEN
+			ton1:=ton1+1;
+		ELSE tmp3:=FALSE;
+		END_IF;
+	ELSE
+		tmp1:=row1;
+		ton1:=0;
+	END_IF;
+END_IF;
+Write_Display(SINGLE_MODE, 0, 0, tmp1);
+Write_Display(SINGLE_MODE, 0, 1, row2);
+Write_Display(SINGLE_MODE, 0, 2, row3);
+Write_Display(SINGLE_MODE, 0, 3, row4);
+END_PROGRAM

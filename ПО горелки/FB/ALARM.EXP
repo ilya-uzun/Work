@@ -1,0 +1,275 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Interface' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK Alarm
+VAR_INPUT
+	wMode : WORD;
+	Quote : BOOL; (*Квитирование*)
+END_VAR
+VAR_OUTPUT
+	NMessage:BYTE;
+	Alarms: ARRAY [1..33] OF BOOL := 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0;
+
+	(*значение датчиков после обработки на ошибки*)
+
+END_VAR
+VAR
+	ZeroAlarms: ARRAY [1..33] OF BOOL := 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0;
+	DECODE_FLOA_AI1: DECODE_FLOAT;
+	DECODE_FLOA_AI2: DECODE_FLOAT;
+	DECODE_FLOA_AI3: DECODE_FLOAT;
+	DECODE_FLOA_AI4: DECODE_FLOAT;
+	DECODE_FLOA_AI5: DECODE_FLOAT;
+	(*DECODE_FLOA_AI6: DECODE_FLOAT; *)
+	DECODE_FLOA_AI8: DECODE_FLOAT;
+	byErr_AI1: BYTE;
+	byErr_AI2: BYTE;
+	byErr_AI3: BYTE;
+	byErr_AI4: BYTE;
+	byErr_AI5: BYTE;
+	byErr_AI6: BYTE;
+	byErr_AI8: BYTE;
+	byErr_AI8Test : BYTE :=0 ;
+	testj:BOOL;
+
+	Block_1: Block_FB;
+END_VAR
+
+(* Ошибки с датчиков
+0         Отсутствие ошибок                             
+6         Нет данных                                    
+7         Датчик отключен                               
+8         Велика температура холодного спая             
+9          Мала температура холодного спая              
+10        Вычисленное значение слишком велико           
+11        Вычисленное значение слишком мало            
+12        Короткое замыкание                            
+13        Обрыв датчика                                 
+14        Отсутствие связи с АЦП                       
+15         Некорректный калибровочный коэффициент        
+*)
+(* @END_DECLARATION := '0' *)
+
+(*Квитирование*)
+(*В ФБ анести Quote и Mode*)
+IF Quote AND wMode = 3 THEN (*Из стоп*)
+	Alarms := ZeroAlarms;
+END_IF;
+IF Quote AND wMode = 1 THEN (*Из АО*)
+	wMode := 3;
+	Alarms := ZeroAlarms;
+END_IF;
+
+IF Quote AND wMode = 2 AND (T11.Q ) THEN (*Из ВО*) (*T11.Q - время продувки*)
+	wMode := 3;
+	T11(IN := 0);
+	Alarms := ZeroAlarms;
+END_IF;
+
+	(*Ошибка канала 1 *)
+	DECODE_FLOA_AI1(
+		VALUE:= reOil_Valve_AI1,
+		DEF_VALUE:= 0.0,
+		_ERR=> byErr_AI1,
+		OUT_VALUE=> reOil_Valve);
+
+	(*Ошибка канала 2 *)
+	DECODE_FLOA_AI2(
+		VALUE:= AirValveFB_prph,
+		DEF_VALUE:= 0.0,
+		_ERR=> byErr_AI2,
+		OUT_VALUE=> reAirValve);
+
+	(*Ошибка канала 3 *)
+	DECODE_FLOA_AI3(
+		VALUE:= rePress_Oil_Return_AI3,
+		DEF_VALUE:= 0.0,
+		_ERR=> byErr_AI3,
+		OUT_VALUE=> rePress_Oil_Return);
+
+	(*Ошибка канала 1 *)
+	DECODE_FLOA_AI4(
+		VALUE:= reTemp_Oil_AI4,
+		DEF_VALUE:= 0.0,
+		_ERR=> byErr_AI4,
+		OUT_VALUE=> reTemp_Oil);
+
+	(*Ошибка канала 1 *)
+	DECODE_FLOA_AI5(
+		VALUE:= reHeater_Oil1_AI5,
+		DEF_VALUE:= 0.0,
+		_ERR=> byErr_AI5,
+		OUT_VALUE=> reHeater_Oil1);
+
+	(*Ошибка канала 1 *)
+	DECODE_FLOA_AI8(
+		VALUE:= reHeater_Oil2_AI8,
+		DEF_VALUE:= 0.0,
+		_ERR=> byErr_AI8,
+		OUT_VALUE=> reHeater_Oil2);
+
+
+	IF Alarms[1] THEN NMessage:=20;
+	ELSIF Alarms[2] THEN NMessage:=21;
+	ELSIF Alarms[3] THEN NMessage:=23;
+	ELSE   NMessage := 0;
+	END_IF
+
+
+(*
+
+(*Аварии Горелки*)
+	IF NOT LimitSwitch THEN BurnerErrors.0:=TRUE; END_IF;
+
+	IF FlameSensorState AND ((ControlState>0 AND ControlState<5) OR (ControlState>20 AND ControlState<24)) THEN
+		IF ton3<20 THEN
+			ton3:=ton3+1;
+		ELSE BurnerErrors.1:=TRUE;
+		END_IF;
+	ELSIF NOT FlameSensorState AND ((ControlState>5 AND ControlState<10) OR ControlState>24) THEN
+		IF ton3<20 THEN
+			ton3:=ton3+1;
+		ELSE BurnerErrors.2:=TRUE;
+		END_IF;
+	ELSE ton3:=0; END_IF;
+	(*Ошбка отсуствие параметра задание мощности *)
+	IF PowerSP_prphBeat=65535 AND ControlMode<>1 THEN BurnerErrors.3:=TRUE; END_IF;
+
+		IF ControlState>0 AND ControlState<>10 THEN
+			 FlameSensorMode:=1;
+		ELSE  FlameSensorMode:=0;
+		END_IF;
+
+		IF FaultReset THEN BurnerErrors:=0; END_IF;
+
+	Alarm:=NOT health;
+	AlarmLed:=NOT health;
+
+
+(*аварии из блока burnet 850*)
+
+(*** ALARMS ******************************************************************************************************************************)
+
+(*1 Погасание пламени*)
+T1.IN := FuelValve_open_out OR IgniterValve_open_out;
+IF Flame_st AND SparkGen_out THEN T1.IN := 0; END_IF;							(*Если пламя появилось в течение 3 с. после подачи топлива в присутствии искры, то таймер сбрасывается*)
+T1;
+IF T1.Q AND NOT Flame_st THEN Alarms[1] := 1; END_IF;
+
+(*2 Пламя в топке*)
+T2.IN :=  FuelValve_open_out OR IgniterValve_open_out AND Flame_st AND Mode <> 3;
+T2;
+IF T2.Q THEN Alarms[2] := 1; END_IF;
+
+(*
+	(*7 Ав.высокое P газа*)
+	IF GasPress > Set_GasPressHH THEN Alarms[7] := 1; END_IF;
+ELSE
+	IF FuelValve_pos >= 15 THEN		(*Контроль давления только при открытом рег. кл., т.к. д.д. стоит после него*)
+	(*8 Низкое Р топлива *)
+	Alarms[8] := FuelPress < Set_FuelPressL;
+
+	(*9 Высокое Р топлива*)
+	Alarms[9] := FuelPress > Set_FuelPressH;
+
+	(*10 Ав.низкое P топлива*)
+	IF FuelPress < Set_FuelPressLL AND Mode > 3 AND Mode < 6 THEN Alarms[10] := 1; END_IF;
+
+	(*11 Ав.высокое P топлива*)
+	IF FuelPress > Set_FuelPressHH THEN Alarms[11] := 1; END_IF;
+	END_IF;
+END_IF;
+  
+(*12 Отказ возд заслонки*)
+Ftemp1 := AirValve_pos - AirValve_setpos;
+Ftemp2 := ABS(Ftemp1);
+Ftemp3 := AirValveMisPos * Ftemp1; (*Контроль смены направления*)
+AirValveMisPos := Ftemp1;
+T6.IN := (Ftemp2 > 20.0) AND NOT (Ftemp3 < 0);(*было T6.IN := (Ftemp2 > 5.0) AND NOT (Ftemp3 < 0);*)
+T6;
+IF T6.Q THEN Alarms[12] := 1; END_IF; *)
+
+(*13 Отказ топл. рег. кл.*)
+Ftemp1 := FuelValve_pos - FuelValve_setpos;
+Ftemp2 := ABS(Ftemp1);
+Ftemp3 := FuelValveMisPos * Ftemp1; (*Контроль смены направления*)
+FuelValveMisPos := Ftemp1;
+T7.IN := (Ftemp2 > 5.0) AND NOT (Ftemp3 < 0);
+T7;
+IF T7.Q THEN Alarms[13] := 1; END_IF;
+
+(*14 Привод ПЧ не готов*)
+IF NOT DriveReady_st THEN Alarms[14] := 1; END_IF;
+
+(*15 Отказ привода ПЧ*)
+T8.IN := Drive_start_out;
+T8;
+IF T8.Q AND NOT DriveOper_st THEN Alarms[15] :=1; END_IF;
+
+(*16 Нет связи с приводом*)
+IF (DriveLink_state <> 0 AND NOT  DriveLink_state=255) THEN Alarms[16] := 1; END_IF;
+
+(*17 Нет связи с ПЛК*)
+IF ModuleLink_state <> 0 THEN Alarms[17] := 1; END_IF;
+
+(*23 Отказ канала датч. пламени*)
+IF FuelFlow_val < -18.75 THEN Alarms[23] := 1; END_IF;
+
+(*24 Отказ канала Рт*)
+IF FuelPress_val < -18.75 THEN Alarms[24] := 1; END_IF;
+
+(*25 Отказ канала Рв*)
+IF AirPress_val < -18.75 THEN Alarms[25] := 1; END_IF;
+
+(*Сброс аварий при включении*)
+IF NOT PLCrun.Q  THEN Alarms := ZeroAlarms; END_IF;
+
+(*Сброс аварий при ручном кроме погасания пламени*)
+IF ManualControl THEN
+	IF Alarms[1] THEN
+		Alarms := ZeroAlarms;
+		Alarms[1] :=1;
+	ELSE
+		Alarms := ZeroAlarms;
+		Alarm := 0;
+	END_IF;
+END_IF;
+
+(*Ошибки блока нагревателей*)
+(*Контроль аварии датчbков*)
+IF (byErrorTempOilReturn >= 6) OR (byErrorHeating1 >= 6)  OR (byErrorHeating2 >= 6) THEN
+	Error.0 := TRUE;
+ELSE
+	Error.0 := FALSE;
+END_IF;
+
+(*Высокая температура топливного нагревателя*)
+IF reHeating1 > 100 THEN
+	Error.1 := TRUE;
+ELSE
+	Error.1 := FALSE;
+END_IF;
+
+(*Высокая температура попливного нагревателя*)
+IF reHeating2 > 100 THEN
+	Error.2 := TRUE;
+ELSE
+	Error.2 := FALSE;
+END_IF;
+
+(*Неисправность нагревателя 1*)
+(*Подумать*)
+(*
+IF  bStart AND bHeatingOil THEN
+		IF ton2 < 500 THEN
+			ton2:=ton2+1;
+		ELSE
+			Error.1:=TRUE;
+		END_IF;
+ELSE ton2:=0;
+END_IF;  *)
+
+*)
+END_FUNCTION_BLOCK
