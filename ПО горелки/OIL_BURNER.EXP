@@ -6,7 +6,7 @@
 (* @SYMFILEFLAGS := '2048' *)
 FUNCTION_BLOCK DriverAirValve
 VAR_INPUT
-	reValuePosition : REAL; (*Потенциометр*)
+
 	intSet : INT; (*Точки задание на открытие*)
 
 
@@ -154,9 +154,6 @@ FUNCTION_BLOCK DriverBurner
 VAR
 	i: BYTE;
 	k: BYTE;
-	ControlStateOld:INT;
-
-
 (*Счётчик продувки 36 с*)
 	T_36s : TON;
 	bT_36s_IN: BOOL :=FALSE;
@@ -170,38 +167,24 @@ VAR
 
 	T_SFlame : TON; (*время работы искры*)
 	bT_SFlam_IN: BOOL :=FALSE;
-	timeT_SFlam  : TIME := T#5s;
+
 	bT_SFlam_OUT: BOOL :=FALSE;
 
 	Alarms: ARRAY [1..33] OF BOOL;
 	(* in*)
-	FuelValve_pos: REAL;
+
 	SetPower_val: REAL;
-	DriveOper_st: BOOL :=FALSE;
-	DriveReady_st: BOOL :=FALSE;
-	MorePower_cmd: BOOL :=FALSE;
-	LessPower_cmd: BOOL;
-	LeakCtrlPress_st: BOOL;
-	FuelSelHeavy_cmd: BOOL; (*Команда выбора топлива 1-тяжелое 0-легкое*)
-	RemoteControl_cmd: BOOL; (*Команда выбора дист. задания 1-удалённое 0-местное больше/меньше*)
-	RemoteTempControl_cmd: BOOL; (*Команда выбора дист. задания 1-температура 0-мощность*)
-	DriveLink_state: WORD; (*Значение ошибки Modbus при связи с приводом*)
-	ModuleLink_state: WORD; (*Значение ошибки Modbus при связи с модулем ПЛК*)
+
+
 	Set_Ala1Time: DWORD;
 	Set_Ala2Time: DWORD;
 	Set_Ala15Time: DWORD;
 
-	Set_FuelValve_MinPos: REAL;
-	Set_FuelValve_MaxPos: REAL;
 	Set_AirValveRegTime: DWORD; (*Время хода заслонки*)
-	Set_FuelValveRegTime: DWORD; (*Время хода клапана топлива *)
-	Set_AirValveStartPos: REAL; (* Положение засл. при продувке на старте *)
+
+
 	Set_StartVentTime: DWORD; (*Время продувки при пуске*)
-	Set_AirValveIgnPosFuel: REAL; (* Положение засл. при розжиге на топливе *)
-	Set_SparkStartTime: DWORD; (* Время работы ген. перед открытием кл.*)
-	Set_IgniterStartTime:  DWORD; (* Время стабилизации запальника*)
-	Set_FlameStartTime: DWORD;  (* Время стабилизации пламени*)
-	Set_StopVentTime: DWORD; (*Время вентиляции при останове*)
+
 	Panel_SafeValve_close: BOOL;
 	Panel_IgniterValve_open: BOOL;
 	Panel_Sparkgen: BOOL;
@@ -211,7 +194,7 @@ VAR
 	Panel_AirValve_setpos: REAL;
 	Panel_Drive_start: BOOL;
 
-	Quote: BOOL;
+
 
 	(*out*)
 	SafeValve_close_out: BOOL;
@@ -222,9 +205,9 @@ VAR
 	AirValve_setpos_out: REAL;
 
 
-	Op_TIme_hrs: DWORD;
+
 	Drive_start_out: BOOL;
-	Siren_out: BOOL;
+
 END_VAR
 
 VAR_INPUT
@@ -632,7 +615,7 @@ IF dwError.7  THEN
 END_IF;
 
 (*Переход в Вынужденный останов аварии  Останов с продувкой*)
-IF  dwError.1 OR dwError.2  OR dwError.3  OR dwError.4  OR dwError.5  OR dwError.8 THEN
+IF  dwError.1 OR dwError.2  OR dwError.3  OR dwError.4  OR dwError.5  OR dwError.8 OR dwError.9 THEN
 	Mode := 2;
 END_IF;
 
@@ -721,12 +704,6 @@ ELSE (*нормальная работа*)
 	Drive_start_out:= SEL(ManualControl, Drive_start, Panel_Drive_start);
 END_IF
 
-(*
-FuelValveScaleOutF( (*Масштабирование выходов на приводы*)
-	IN := FuelValve_setpos_out,
-	OUT_MIN := Set_FuelValve_MinPos + 20,
-	OUT_MAX := Set_FuelValve_MaxPos * 0.8 + 20);
-FuelValve_setpos_out := FuelValveScaleOutF.OUT / 100; *)
 END_FUNCTION_BLOCK
 
 
@@ -848,10 +825,10 @@ VAR
 	mode:BYTE:=0;					(*0 - индикация; 1..4 - изменение значений*)
 	tmp1:STRING;
 	tmp2:STRING;
-	tmp3:STRING;
-	tmp4:INT;
-	ControlModeOld:BYTE;
-	ton1:INT;
+
+
+
+
 
 	spt1: INT;
 	spt2: INT;
@@ -1009,7 +986,7 @@ CASE scrn OF															(*выбор окон*)
 		Screen(row1:= 'Настройка' , row2:='Выбор топлива' , row3:=tmp1 , row4:='           режим', mode:=mode);
 
 	102:
-		Screen(row1:= 'Настройка' , row2:='Темп Нефть' , row3:='Измеренное =  Гр' , row4:='Уставка =   Гр', sp1:= REAL_TO_INT(reTemp_Oil) , sp2:= intHeater_Oil1_set, mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='Темп Нефть' , row3:='Измеренное=  Гр' , row4:='Уставка=   Гр', sp1:= REAL_TO_INT(reTemp_Oil) , sp2:= intHeater_Oil1_set, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				2:	IF key_up THEN intHeater_Oil1_set := intHeater_Oil1_set + 1;
@@ -1018,7 +995,7 @@ CASE scrn OF															(*выбор окон*)
 			END_CASE;
 		END_IF;
 	103:
-		Screen(row1:= 'Настройка' , row2:='Темп Дизель' , row3:='Измеренное =  Гр' , row4:='Уставка =   Гр', sp1:= REAL_TO_INT(reTemp_Oil) , sp2:= intHeater_Oil2_set, mode:=mode);
+		Screen(row1:= 'Настройка' , row2:='Темп Дизель' , row3:='Измеренное=  Гр' , row4:='Уставка=   Гр', sp1:= REAL_TO_INT(reTemp_Oil) , sp2:= intHeater_Oil2_set, mode:=mode);
 		IF trgr.0 THEN
 			CASE mode OF
 				2:	IF key_up THEN intHeater_Oil2_set:= intHeater_Oil2_set + 1;
@@ -1451,7 +1428,7 @@ VAR_OUTPUT
 END_VAR
 VAR
 
-	Error: BYTE;
+
 
 
 END_VAR
@@ -1558,7 +1535,7 @@ VAR_INPUT
 	IN: REAL;				(* input value*)
 END_VAR
 VAR
-	IN_Tr : REAL;
+
 	IN_MIN:REAL := 0;			(* minimum input value *)
 	IN_MAX:REAL := 100;			(* maximum input value *)
 	OUT_MIN:REAL := 0.37;		(* corresponding minimum output value *)
@@ -1628,21 +1605,21 @@ VAR
 	Block_7_Start :  BOOL:= FALSE;
 	Block_8_Start :  BOOL:= FALSE;
 	Block_9_Start :  BOOL:= FALSE;
-	ton2: INT :=0;
+
 
 	TP_8: TP_X;
 	TP_9: TP_X;
 
 
-	bT_stabErr_IN: BOOL :=FALSE;
+
 	timeT_stabErr  : TIME := T#3s;
-	bT_stabErr_OUT: BOOL :=FALSE;
 
 
 
-	bT_genErr_IN: BOOL :=FALSE;
-	timeT_genErr  : TIME := T#3S;
-	bT_genErr_OUT: BOOL :=FALSE;
+
+
+
+
 
 END_VAR
 
@@ -2046,8 +2023,8 @@ VAR_INPUT
 	row2:STRING;
 	row3:STRING;
 	row4:STRING;
-	key_up:BOOL;
-	key_down:BOOL;
+
+
 	sp1:INT;
 	sp2:INT;
 	sp3:INT;
@@ -2789,16 +2766,16 @@ VAR
 	Settings:COMSETTINGS;				(* настройки последовательного порта *)
       	com_num: PORTS:=0;				(*0 - RS-485, 1 - RS-232*)
 	send2_modbus: MB_WR_REGS;         (*функция 16 - запись параметров*)
-	get1_modbus: MB_RD_HOLD_REGS;    (*функция 03 - чтение параметра типа INT*)
+
 	Buffer: ARRAY[0..255] OF BYTE;		(* байтовый буфер данных *)
      	cmpl: BOOL;
-	Init: BOOL;								(* признак инициализации пользовательской программы *)
-	enabl: BOOL;							(*состояние работы блока*)
+
+
 	err: INT;								(*номер ошибки*)
 	TimeOut: TIME:=T#600ms;				(*таймаут*)
-	Exception: BYTE;
+
 	DataSize: WORD;
-	master1: BYTE:= 1;
+
 
 	Modbus_prph:INT;
 
@@ -2830,8 +2807,6 @@ END_IF
 
 reHeating_Oil:=BOOL_TO_REAL(bHeating_Oil);
 reHeating_Value:=BOOL_TO_REAL(bHeating_Value);
-(*CurrentPower_prph:=CurrentPower; *)
-(*AirValve_prph:=INT_TO_REAL(AirValveSet)/100.0; *)
 
 (*Запись в модуль*)
 Modbus_prph.0:= bOut_ValueY1_NC OR bOut_ValueY1_NC_VI;
@@ -2863,7 +2838,6 @@ IF ControlMode<>2 THEN
 ELSE
 	HeatTemperature:=(PowerSP_prph*INT_TO_REAL(HeatTemperatureHH-HeatTemperatureLL)/100.0)+INT_TO_REAL(HeatTemperatureLL);
 END_IF;
-(*AirPressure:=REAL_TO_INT (AirPressure_prph*40.0); *)
 
 
 IF COM_SERVICE1.ready THEN
@@ -2914,7 +2888,7 @@ VAR
 
 	FixB : FixButton;
 	byModeTest : WORD;
-	testt: INT;
+
 END_VAR
 (* @END_DECLARATION := '0' *)
 _CFC_BODY
@@ -3352,12 +3326,7 @@ _INSTANCE: 1
 _INSTANCENAME: DAirValve
 _TYPENAME: DriverAirValve
 _ENENO: 0
-_INPUTS: 2
-_IN
-_INPUTID: 0
-_INPUTIDX: 0
-_NEGATE: 0
-_END
+_INPUTS: 1
 _IN
 _INPUTID: 68
 _INPUTIDX: 0
@@ -4141,15 +4110,14 @@ VAR_GLOBAL
 	DHeating_Oil : DriversHeating_Oil;
 	Burner : DriverBurner;
 
-	BoilerControl:DriverBoiler;
+
 	DAirValve : DriverAirValve;
 	Trans:BOOL;
-	CurrentPower:INT;
+
 	LimitSwitch:BOOL;
 	Start:BOOL;
 	AirValveFB:INT;
 	PowerSP:INT;
-	AirPressure:INT;
 
 	bOut_ValueY1_NC : BOOL;
 	bOut_ValueY2_NO : BOOL;
@@ -4157,25 +4125,12 @@ VAR_GLOBAL
 	bOut_Air_less : BOOL;
 
 	GasRegUp:BOOL;
-	GasRegDown:BOOL;
-	Run:BOOL;
+
 	Alarm:BOOL;
-	RunLed:BOOL;
-	AlarmLed:BOOL;
-	StartCmnd:BOOL;
+
 	FaultReset:BOOL; (* сброс неисправности*)
 	ControlState: INT;  (* контроль *)
-
-	GasRegValveCalibrateEnable: BOOL;  (*калибровка*)
-	GasRegValveStop: BOOL;
-
-	AirValveStop: BOOL;
-
 	FunStart: BOOL;
-	FunStop: BOOL;
-	GasValveStop: BOOL;
-
-	GasRegulatorStop: BOOL;
 
 	scrn: INT:=0;
 	key_f1: BOOL;
@@ -4187,11 +4142,8 @@ VAR_GLOBAL
 	key_up: BOOL;
 	key_down: BOOL;
 	key_enter: BOOL;
-	Health: BOOL;
-	NumberMessage: DWORD; (*код ошибок*)
-	AirValveCalibrateEnable: BOOL;
 
-	GasRegulatorServiceMode: BOOL;
+	NumberMessage: DWORD; (*код ошибок*)
 	HeatTemperature: REAL;
 
 	Valve3: BOOL;
@@ -4204,17 +4156,11 @@ VAR_GLOBAL
 	reTemp_Oil : REAL;
 	reHeater_Oil1 : REAL;
 	reHeater_Oil2 : REAL;
-
-	bControlFlame: BOOL; (*Контроль наличия пламяни на стабилизации*)
 (*воздушный клапан*)
-	reDAirValve_Open : INT; (*Процент для открытия заслонки*)
-
 	ControOil : BYTE; (*Выбор топлива*)
 	FunStartMode : BOOL; (*Запуск вентилятора в ручном режиме*)
 	bOut_Air_moreMode : BOOL; (*Запуск в ручном режиме*)
 	bOut_Air_lessMode : BOOL; (*Запуск в ручном режиме*)
-	DHeating_Oil_bStart : BOOL;
-
 	reReg_set_0_10 : REAL;
 	reReg_set_0_10_VI : REAL;
 	Valve3_VI : BOOL;
@@ -4230,25 +4176,9 @@ VAR_GLOBAL RETAIN
 
 	ControlMode: BYTE;
 
-	AirValveStartSP: INT := 75;
-	StartDelayTime: INT := 30;
-
-	IgnitionDelayTime: INT := 4;
-	StabilizationDelayTime: INT := 10;
-
-	GasRegulatorSetPoint: INT := 20;
-
-	AirValveStopSP: INT := 75;
-	StopDelayTime: INT := 30;
-
 	HeatTemperatureHH: INT := 180;
 	HeatTemperatureLL: INT := -50;
 	HeatTemperatureSP: INT := 60;
-	HeaterTemperatureRegP:INT:=30;
-	HeaterTemperatureRegI:INT:=30;
-	HeaterTemperatureRegD:INT:=10;
-
-	HeatTemperatureOff: INT := 80;
 
 	intHeater_Oil1_set : INT := 10; (* 50 Температура нефти*)
 	intHeater_Oil2_set : INT := 10; (* 25 Температура дизеля*)
@@ -4308,7 +4238,7 @@ VAR_GLOBAL
 	T21: TON := (PT := t#30s); (*Время макс. работы искрогенератора*)
 	T101: TON; (* Время подогрева*)
 	T103: TON; (* Время продуви*)
-	T107: TON; (* Время работы ген. перед открытием кл.*)
+
 	T109: TON; (*Время розжига запальника*)
 	T111: TON; (*Время стабилизации пламени*)
 	T112: TON;(*Защита от дребезга контактов при переводе в стоп*)
@@ -4342,8 +4272,8 @@ VAR_GLOBAL
 
 	VentilationRequiered: BOOL;		(*Требуется продувка при вынужденном останове.*)
 	Stage: BYTE;
-	FuelSel: BOOL := TRUE; (* Выбор топлива 1-жидкое 0-газ *)
-	FuelSelHeavy: BOOL; (*Выбора топлива 1-тяжелое 0-легкое*)
+
+
 
 	Meandr2s:BLINK := (Enable :=1, Timehigh := t#2s, Timelow := t#2s);
 	Meandr1s:BLINK := (Enable :=1, Timehigh := t#0.5s, Timelow := t#0.5s);
@@ -4352,8 +4282,8 @@ VAR_GLOBAL
 	StopEdge: F_TRIG;
 	StartingPLCdone: R_TRIG;
 
-	FuelValveScaleInF: LIN_TRAFO := (OUT_MIN := 0.0, 	OUT_MAX := 100.0);
-	FuelValveScaleOutF: LIN_TRAFO := (IN_MIN := 0.0, 	IN_MAX := 100.0);
+
+
 
 	DotScaleUp: LIN_TRAFO := (IN_MIN := 0.0, 	IN_MAX := 1.0); (*Определение значения по мощности на оси абсцисс*)
 	DotScaleDn: LIN_TRAFO := (OUT_MIN := 0.0, 	OUT_MAX := 1.0); (*Определение доли мощности между точками*)
